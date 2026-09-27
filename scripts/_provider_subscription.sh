@@ -23,7 +23,7 @@
 # This is for local development. The token authenticates as one person against their own
 # subscription, so it does not belong in a shared or deployed stack.
 
-SUBSCRIPTION_DEFAULT_MODEL="claude-sonnet-4-6"
+SUBSCRIPTION_DEFAULT_MODEL="claude-sonnet-5"
 
 # Every key this arm may write. run.sh --reset clears them all so switching providers is clean.
 # shellcheck disable=SC2034  # consumed by run.sh --reset
@@ -80,6 +80,11 @@ TXT
 
   setenv CLAUDE_CODE_OAUTH_TOKEN "$token"
   setenv CLAUDE_MODEL "$model"
+  # Registration-only extras: what the ticket LLM picker offers next to CLAUDE_MODEL. A leftover
+  # us.anthropic.* / gateway-namespaced id from a previous provider would be rejected by the
+  # first-party API exactly as CLAUDE_MODEL is above, so clear it rather than carry it over —
+  # same reasoning as the gateway arm.
+  setenv CLAUDE_EXTRA_MODELS ""
   setenv ANTHROPIC_API_KEY ""    # load-bearing — see header
   setenv ANTHROPIC_BASE_URL ""   # load-bearing — see header
 

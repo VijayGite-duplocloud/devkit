@@ -36,7 +36,7 @@ t "writes the token and a default model from flags"
 reset_env; F_SUBSCRIPTION_TOKEN="sk-ant-oat01-abc"
 provider_subscription_configure >/dev/null 2>&1
 if [ "$(getenv CLAUDE_CODE_OAUTH_TOKEN)" = "sk-ant-oat01-abc" ] \
-   && [ "$(getenv CLAUDE_MODEL)" = "claude-sonnet-4-6" ]; then ok; else bad "$(cat "$ENV")"; fi
+   && [ "$(getenv CLAUDE_MODEL)" = "claude-sonnet-5" ]; then ok; else bad "$(cat "$ENV")"; fi
 
 t "an explicit model flag wins over the default"
 reset_env; F_SUBSCRIPTION_TOKEN="sk-ant-oat01-abc"; F_SUBSCRIPTION_MODEL="claude-sonnet-5"
@@ -68,14 +68,14 @@ if provider_subscription_configure >/dev/null 2>&1; then bad "returned 0 with no
 # A Bedrock inference-profile id is rejected outright by the first-party API, so a model left
 # over from a Bedrock run must not be carried onto this path.
 t "replaces a leftover us.anthropic.* model id with the bare default"
-reset_env; setenv CLAUDE_MODEL "us.anthropic.claude-sonnet-4-6"; F_SUBSCRIPTION_TOKEN="sk-ant-oat01-abc"
+reset_env; setenv CLAUDE_MODEL "us.anthropic.claude-sonnet-5"; F_SUBSCRIPTION_TOKEN="sk-ant-oat01-abc"
 provider_subscription_configure >/dev/null 2>&1
-if [ "$(getenv CLAUDE_MODEL)" = "claude-sonnet-4-6" ]; then ok; else bad "$(getenv CLAUDE_MODEL)"; fi
+if [ "$(getenv CLAUDE_MODEL)" = "claude-sonnet-5" ]; then ok; else bad "$(getenv CLAUDE_MODEL)"; fi
 
 t "replaces a leftover gateway-namespaced model id with the bare default"
-reset_env; setenv CLAUDE_MODEL "anthropic/claude-sonnet-4.6"; F_SUBSCRIPTION_TOKEN="sk-ant-oat01-abc"
+reset_env; setenv CLAUDE_MODEL "anthropic/claude-sonnet-5"; F_SUBSCRIPTION_TOKEN="sk-ant-oat01-abc"
 provider_subscription_configure >/dev/null 2>&1
-if [ "$(getenv CLAUDE_MODEL)" = "claude-sonnet-4-6" ]; then ok; else bad "$(getenv CLAUDE_MODEL)"; fi
+if [ "$(getenv CLAUDE_MODEL)" = "claude-sonnet-5" ]; then ok; else bad "$(getenv CLAUDE_MODEL)"; fi
 
 t "keeps a bare model id already in .env"
 reset_env; setenv CLAUDE_MODEL "claude-opus-4-8"; F_SUBSCRIPTION_TOKEN="sk-ant-oat01-abc"
