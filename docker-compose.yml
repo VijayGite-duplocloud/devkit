@@ -107,7 +107,7 @@ services:
       # ── LLM provider (agent picks by precedence: ANTHROPIC_API_KEY → gateway (ANTHROPIC_BASE_URL
       #    without a key) → Azure Foundry → CLAUDE_CODE_OAUTH_TOKEN → AWS Bedrock). Set the one you use
       #    in .env; the rest stay empty. ──
-      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-6}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-5}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       # Your own Claude Code subscription (`./run.sh --model subscription`). Sits next-to-last in the
       # agent's precedence chain, deliberately: a token exported in a shell must never displace a

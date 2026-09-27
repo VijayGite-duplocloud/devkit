@@ -33,30 +33,30 @@ cat > "$ENV" <<'ENVF'
 DEVKIT_MODEL=gateway
 ANTHROPIC_BASE_URL=https://openrouter.ai/api
 ANTHROPIC_AUTH_TOKEN=gw-token
-CLAUDE_MODEL=anthropic/claude-sonnet-4.6
+CLAUDE_MODEL=anthropic/claude-sonnet-5
 ENVF
 if switch subscription --subscription-token sk-ant-oat01-x \
-   && [ "$(getenv CLAUDE_MODEL)" = "claude-sonnet-4-6" ] \
+   && [ "$(getenv CLAUDE_MODEL)" = "claude-sonnet-5" ] \
    && [ -z "$(getenv ANTHROPIC_BASE_URL)" ]; then ok; else bad "CLAUDE_MODEL=$(getenv CLAUDE_MODEL); $(cat "$ROOT/out")"; fi
 
 t "the gateway's model is stashed under its own provider"
-if [ "$(getenv _STASH_GATEWAY_CLAUDE_MODEL)" = "anthropic/claude-sonnet-4.6" ] \
+if [ "$(getenv _STASH_GATEWAY_CLAUDE_MODEL)" = "anthropic/claude-sonnet-5" ] \
    && [ -z "$(getenv _STASH_CLAUDE_MODEL)" ]; then ok; else bad "$(grep _STASH "$ENV")"; fi
 
 t "subscription → gateway restores the gateway's own model, not the subscription's"
-if switch gateway && [ "$(getenv CLAUDE_MODEL)" = "anthropic/claude-sonnet-4.6" ] \
-   && [ "$(getenv _STASH_SUBSCRIPTION_CLAUDE_MODEL)" = "claude-sonnet-4-6" ]; then ok; else bad "CLAUDE_MODEL=$(getenv CLAUDE_MODEL); $(cat "$ROOT/out")"; fi
+if switch gateway && [ "$(getenv CLAUDE_MODEL)" = "anthropic/claude-sonnet-5" ] \
+   && [ "$(getenv _STASH_SUBSCRIPTION_CLAUDE_MODEL)" = "claude-sonnet-5" ]; then ok; else bad "CLAUDE_MODEL=$(getenv CLAUDE_MODEL); $(cat "$ROOT/out")"; fi
 
 t "gateway → subscription again restores the stashed token without re-entry"
 if switch subscription && [ "$(getenv CLAUDE_CODE_OAUTH_TOKEN)" = "sk-ant-oat01-x" ] \
-   && [ "$(getenv CLAUDE_MODEL)" = "claude-sonnet-4-6" ]; then ok; else bad "$(cat "$ROOT/out")"; fi
+   && [ "$(getenv CLAUDE_MODEL)" = "claude-sonnet-5" ]; then ok; else bad "$(cat "$ROOT/out")"; fi
 
 t "a pre-namespacing flat stash is still honoured for an unshared key"
-printf 'DEVKIT_MODEL=anthropic\nANTHROPIC_API_KEY=sk-ant-api03-x\n_STASH_CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-legacy\n_STASH_CLAUDE_MODEL=us.anthropic.claude-sonnet-4-6\n' > "$ENV"
+printf 'DEVKIT_MODEL=anthropic\nANTHROPIC_API_KEY=sk-ant-api03-x\n_STASH_CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-legacy\n_STASH_CLAUDE_MODEL=us.anthropic.claude-sonnet-5\n' > "$ENV"
 if switch subscription && [ "$(getenv CLAUDE_CODE_OAUTH_TOKEN)" = "sk-ant-oat01-legacy" ]; then ok; else bad "$(cat "$ROOT/out")"; fi
 
 t "…but a flat stash of a shared key (CLAUDE_MODEL) is ignored"
-if [ "$(getenv CLAUDE_MODEL)" = "claude-sonnet-4-6" ]; then ok; else bad "CLAUDE_MODEL=$(getenv CLAUDE_MODEL)"; fi
+if [ "$(getenv CLAUDE_MODEL)" = "claude-sonnet-5" ]; then ok; else bad "CLAUDE_MODEL=$(getenv CLAUDE_MODEL)"; fi
 
 echo; echo "$PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]
