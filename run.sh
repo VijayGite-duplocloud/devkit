@@ -23,8 +23,7 @@
 #                                  this also replaces it: the saved request id can only verify the address it
 #                                  was made for, so a new address drops it and requests again. That is how you
 #                                  get out of a mistyped email whose verification link you never received.
-#   ./run.sh --no-metrics          opt out of usage metrics (default is opted in); --metrics opts back in.
-#   ./run.sh --email a@b.com --password 'pw' --model anthropic --anthropic-key sk-... --no-metrics   non-interactive.
+#   ./run.sh --email a@b.com --password 'pw' --model anthropic --anthropic-key sk-...   non-interactive.
 #   ./run.sh --model bedrock --aws-access-key-id AKIA... --aws-secret-access-key ... [--aws-session-token ...] [--aws-region us-west-2]
 #   ./run.sh --model bedrock-instance-role [--aws-region us-east-1]   Bedrock via this EC2 instance's IAM role (no keys).
 #   ./run.sh --model subscription --subscription-token sk-ant-oat01-...   run on your own Claude Code
@@ -51,7 +50,6 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 ENV=.env
-. ./scripts/_metrics.sh
 . ./scripts/_provider_gateway.sh
 . ./scripts/_provider_subscription.sh
 . ./scripts/_studio_api.sh
@@ -63,7 +61,7 @@ F_AWS_KEY=""; F_AWS_SECRET=""; F_AWS_TOKEN=""; F_AWS_REGION=""
 F_GATEWAY_URL=""; F_GATEWAY_TOKEN=""; F_GATEWAY_MODEL=""
 F_GATEWAY_DISABLE_BETAS=""; F_GATEWAY_MAX_CONTEXT=""; F_GATEWAY_COMPACT_WINDOW=""
 F_SUBSCRIPTION_TOKEN=""; F_SUBSCRIPTION_MODEL=""
-F_STUDIO_TAG=""; F_UI_TAG=""; F_AGENT_TAG=""; F_METRICS=""
+F_STUDIO_TAG=""; F_UI_TAG=""; F_AGENT_TAG=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --reset) RESET=1 ;;
@@ -97,8 +95,6 @@ while [ $# -gt 0 ]; do
     --studio-tag) F_STUDIO_TAG="$2"; shift ;;
     --ui-tag) F_UI_TAG="$2"; shift ;;
     --agent-tag) F_AGENT_TAG="$2"; shift ;;
-    --metrics) F_METRICS=1 ;;
-    --no-metrics) F_METRICS=0 ;;
     -h|--help) sed -n '2,/^[^#]/p' "$0" | grep -E '^#( |$)' | sed 's/^#//'; exit 0 ;;
     *) echo "Unknown flag: $1" >&2; exit 1 ;;
   esac
@@ -592,8 +588,7 @@ if [ "$RESET" = 1 ]; then
            CLAUDE_MODEL CLAUDE_EXTRA_MODELS "${GATEWAY_KEYS[@]}" "${SUBSCRIPTION_KEYS[@]}" \
            Encryption__MasterKey Authentication__JwtSharedSecret DUPLO_ADMIN_TOKEN EXTENSION_DEV_WORKSPACE_ID \
            EXTENSION_DEV_PERMSET_ID EXTENSION_DEV_PERMSETGROUP_ID \
-           QDRANT_PROVIDER_ID QDRANT_SCOPE_ID QDRANT_COLLECTION_ID \
-           DUPLO_USAGE_METRICS METRICS_CONF; do
+           QDRANT_PROVIDER_ID QDRANT_SCOPE_ID QDRANT_COLLECTION_ID; do
     setenv "$k" ""
   done
   # Also drop any _STASH_<KEY>= lines scripts/switch-llm.sh left behind for a provider swap — a reset
@@ -993,19 +988,6 @@ else
   echo "Unknown model '$MODEL' (use anthropic, bedrock, gateway, bedrock-instance-role, or subscription)." >&2; exit 1
 fi
 
-# ── usage metrics ────────────────────────────────────────────────────────────
-# Deliberately the LAST prompt: a consent question should stand on its own, not sit wedged between
-# "pick a provider" and "paste your API key".
-#
-# Opted in by default. Opting out mounts an nginx fragment that strips the Mixpanel key from the
-# served UI bundle, so the browser never receives it. Both keys are written on EVERY run: compose
-# falls back to metrics-off.conf when METRICS_CONF is unset or blank, so an opted-in user must have
-# it written explicitly. Re-deriving it every run also makes flipping DUPLO_USAGE_METRICS in .env by
-# hand and re-running a supported post-install opt-out.
-METRICS="$(metrics_resolve "$F_METRICS" "$(getenv DUPLO_USAGE_METRICS)" "$NONINTERACTIVE")"
-setenv DUPLO_USAGE_METRICS "$METRICS"
-setenv METRICS_CONF "$(metrics_conf_for "$METRICS")"
-
 # Optional image-tag overrides
 [ -n "$F_STUDIO_TAG" ] && setenv STUDIO_TAG "$F_STUDIO_TAG"
 [ -n "$F_UI_TAG" ] && setenv UI_TAG "$F_UI_TAG"
@@ -1187,12 +1169,6 @@ case "$KB_RC" in
   *) echo "    (knowledge base setup failed — run ./scripts/register-qdrant.sh manually)" ;;
 esac
 
-if [ "$METRICS" = 1 ]; then
-  METRICS_STATE="on (opted in)"
-else
-  METRICS_STATE="off (opted out — the UI is served without the Mixpanel key)"
-fi
-
 PROVIDER_DESC="$MODEL"
 [ "$MODEL" = bedrock-instance-role ] && PROVIDER_DESC="bedrock via EC2 instance role${AWS_ROLE:+ ($AWS_ROLE)} @ $(getenv AWS_REGION) — no keys in .env"
 [ "$MODEL" = gateway ] && PROVIDER_DESC="LLM gateway @ $(getenv ANTHROPIC_BASE_URL)"
@@ -1206,8 +1182,6 @@ cat <<EOF
   Workspace extension-dev  ($WS)  ·  agent registered + attached
   Token     DUPLO_ADMIN_TOKEN set in .env (permanent)
   License   ${LICENSE_STATUS:-set in .env} (Licensing__Token)$PERSONA_LINE$LLM_LINE$KB_LINE$TF_EXT_LINE
-  Metrics   $METRICS_STATE
-            change: set DUPLO_USAGE_METRICS=0|1 in .env, re-run ./run.sh, reload the UI tab  ·  see PRIVACY.md
 
 Build & deploy your extension (scripts read the target from .env — no DUPLO_BASE= prefix needed):
   ./scripts/build-extension.sh  extensions/<name>               # your extensions live in extensions/<name>/
