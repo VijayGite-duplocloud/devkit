@@ -8,7 +8,7 @@
 
 services:
   mongo:
-    image: mongo:6.0
+    image: mongo:7.0.14
     restart: unless-stopped
     ports:
       - "${MONGO_PORT:-27017}:27017"
@@ -105,9 +105,14 @@ services:
       - CCA_DISABLE_BWRAP=true
       - CLAUDECODE=''
       # ── LLM provider (agent picks by precedence: ANTHROPIC_API_KEY → gateway (ANTHROPIC_BASE_URL
-      #    without a key) → Azure Foundry → AWS Bedrock). Set the one you use in .env; the rest stay empty. ──
-      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-6}
+      #    without a key) → Azure Foundry → CLAUDE_CODE_OAUTH_TOKEN → AWS Bedrock). Set the one you use
+      #    in .env; the rest stay empty. ──
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-5}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Your own Claude Code subscription (`./run.sh --model subscription`). Sits next-to-last in the
+      # agent's precedence chain, deliberately: a token exported in a shell must never displace a
+      # provider someone configured on purpose. Local development only — it authenticates as one person.
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
       # LLM gateway (OpenRouter, Bifrost, LiteLLM, Snowflake Cortex …). The CLAUDE_CODE_* knobs are
       # optional per-gateway tuning the agent forwards to the Claude CLI only when set.
       - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
@@ -140,11 +145,6 @@ services:
     volumes:
       # Published image serves the SPA only; this conf proxies API prefixes to the studio (same-origin, no CORS).
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-      # Selected by run.sh from the DUPLO_USAGE_METRICS answer: metrics-on.conf inserts the
-      # Mixpanel key, metrics-off.conf strips it. Included by default.conf. The fallback is
-      # metrics-off.conf so a stack brought up without run.sh (no METRICS_CONF in .env) fails
-      # closed — no key — rather than tracking someone who never answered. See PRIVACY.md.
-      - ./nginx/${METRICS_CONF:-metrics-off.conf}:/etc/nginx/metrics.conf:ro
     depends_on:
       - duplo-ai-studio
 

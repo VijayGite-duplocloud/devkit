@@ -47,8 +47,7 @@ docker --version && docker compose version
    request without sending a second email.
 
    The remaining prompts: `Admin password:` (remembered by the database, not changeable by editing `.env`
-   later), `Select LLM provider:` → `Enter 1 or 2:` (`1` anthropic, `2` bedrock) and its key, and
-   `Opt out of usage metrics? [y/N]:`.
+   later) and `Select LLM provider:` → `Enter 1 or 2:` (`1` anthropic, `2` bedrock) and its key.
 
 4. `./run.sh` prints a `✔ Platform ready` summary when the stack is up. Sign in at
    <http://localhost:4210> with that email and password. You land with the `extension-dev` workspace

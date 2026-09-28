@@ -23,11 +23,15 @@
 #                                  this also replaces it: the saved request id can only verify the address it
 #                                  was made for, so a new address drops it and requests again. That is how you
 #                                  get out of a mistyped email whose verification link you never received.
-#   ./run.sh --no-metrics          opt out of usage metrics (default is opted in); --metrics opts back in.
-#   ./run.sh --email a@b.com --password 'pw' --model anthropic --anthropic-key sk-... --no-metrics   non-interactive.
+#   ./run.sh --email a@b.com --password 'pw' --model anthropic --anthropic-key sk-...   non-interactive.
 #   ./run.sh --model bedrock --aws-access-key-id AKIA... --aws-secret-access-key ... [--aws-session-token ...] [--aws-region us-west-2]
 #   ./run.sh --model bedrock-instance-role [--aws-region us-east-1]   Bedrock via this EC2 instance's IAM role (no keys).
-#   ./run.sh --model gateway --gateway-url https://openrouter.ai/api --gateway-token sk-or-... [--gateway-model anthropic/claude-sonnet-4.6]
+#   ./run.sh --model subscription --subscription-token sk-ant-oat01-...   run on your own Claude Code
+#                                  subscription instead of a billed API key (mint the token with
+#                                  `claude setup-token` on this machine). Local development only: it
+#                                  authenticates as you and counts against your Claude Code limits.
+#                                  Ticket titles are not generated on this path (title LLM is Bedrock-only).
+#   ./run.sh --model gateway --gateway-url https://openrouter.ai/api --gateway-token sk-or-... [--gateway-model anthropic/claude-sonnet-5]
 #                                  any Anthropic-compatible LLM gateway (OpenRouter, Bifrost, LiteLLM, …). Optional
 #                                  Sets a 262144-token context window and a 200000 compact threshold (a gateway
 #                                  usually serves model ids the CLI does not know, which otherwise have none);
@@ -46,8 +50,9 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 ENV=.env
-. ./scripts/_metrics.sh
 . ./scripts/_provider_gateway.sh
+. ./scripts/_provider_subscription.sh
+. ./scripts/_studio_api.sh
 
 # ── flags ────────────────────────────────────────────────────────────────────
 RESET=0; RESET_LICENSE=0; NONINTERACTIVE=0
@@ -55,7 +60,8 @@ F_EMAIL=""; F_PASSWORD=""; F_MODEL=""; F_ANTHROPIC=""; F_LICENSE=""
 F_AWS_KEY=""; F_AWS_SECRET=""; F_AWS_TOKEN=""; F_AWS_REGION=""
 F_GATEWAY_URL=""; F_GATEWAY_TOKEN=""; F_GATEWAY_MODEL=""
 F_GATEWAY_DISABLE_BETAS=""; F_GATEWAY_MAX_CONTEXT=""; F_GATEWAY_COMPACT_WINDOW=""
-F_STUDIO_TAG=""; F_UI_TAG=""; F_AGENT_TAG=""; F_METRICS=""
+F_SUBSCRIPTION_TOKEN=""; F_SUBSCRIPTION_MODEL=""
+F_STUDIO_TAG=""; F_UI_TAG=""; F_AGENT_TAG=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --reset) RESET=1 ;;
@@ -78,6 +84,8 @@ while [ $# -gt 0 ]; do
     --aws-secret-access-key) F_AWS_SECRET="$2"; shift ;;
     --aws-session-token) F_AWS_TOKEN="$2"; shift ;;
     --aws-region) F_AWS_REGION="$2"; shift ;;
+    --subscription-token) F_SUBSCRIPTION_TOKEN="$2"; shift ;;
+    --subscription-model) F_SUBSCRIPTION_MODEL="$2"; shift ;;
     --gateway-url) F_GATEWAY_URL="$2"; shift ;;
     --gateway-token) F_GATEWAY_TOKEN="$2"; shift ;;
     --gateway-model) F_GATEWAY_MODEL="$2"; shift ;;
@@ -87,8 +95,6 @@ while [ $# -gt 0 ]; do
     --studio-tag) F_STUDIO_TAG="$2"; shift ;;
     --ui-tag) F_UI_TAG="$2"; shift ;;
     --agent-tag) F_AGENT_TAG="$2"; shift ;;
-    --metrics) F_METRICS=1 ;;
-    --no-metrics) F_METRICS=0 ;;
     -h|--help) sed -n '2,/^[^#]/p' "$0" | grep -E '^#( |$)' | sed 's/^#//'; exit 0 ;;
     *) echo "Unknown flag: $1" >&2; exit 1 ;;
   esac
@@ -579,11 +585,10 @@ if [ "$RESET" = 1 ]; then
   docker compose down -v 2>/dev/null || true
   for k in Authentication__LocalAdminEmail Authentication__LocalAdminPassword Authentication__SuperUsers \
            DEVKIT_MODEL ANTHROPIC_API_KEY AWS_REGION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN \
-           "${GATEWAY_KEYS[@]}" \
+           CLAUDE_MODEL CLAUDE_EXTRA_MODELS "${GATEWAY_KEYS[@]}" "${SUBSCRIPTION_KEYS[@]}" \
            Encryption__MasterKey Authentication__JwtSharedSecret DUPLO_ADMIN_TOKEN EXTENSION_DEV_WORKSPACE_ID \
            EXTENSION_DEV_PERMSET_ID EXTENSION_DEV_PERMSETGROUP_ID \
-           QDRANT_PROVIDER_ID QDRANT_SCOPE_ID QDRANT_COLLECTION_ID \
-           DUPLO_USAGE_METRICS METRICS_CONF; do
+           QDRANT_PROVIDER_ID QDRANT_SCOPE_ID QDRANT_COLLECTION_ID; do
     setenv "$k" ""
   done
   # Also drop any _STASH_<KEY>= lines scripts/switch-llm.sh left behind for a provider swap — a reset
@@ -637,7 +642,10 @@ resolve() { # flagval envkey prompt [secret]
 
 # The Bedrock model id the dev kit runs on — also what detect-bedrock.sh probes, so a successful
 # probe proves invoke permission on the exact model the agent will call (not just "some" Bedrock access).
-BEDROCK_PROBE_MODEL="us.anthropic.claude-sonnet-4-6"
+# BEDROCK_EXTRA_MODELS are offered alongside it in the ticket LLM picker (not probed — a missing Opus
+# inference profile shows up as a failed ticket, not a failed setup).
+BEDROCK_PROBE_MODEL="us.anthropic.claude-sonnet-5"
+BEDROCK_EXTRA_MODELS="us.anthropic.claude-opus-5"
 
 echo "==> Setup (prompts appear only for values not already set)…"
 # Very basic email sanity check: name@example.com (no spaces).
@@ -839,7 +847,7 @@ fi
 PASSWORD="$(resolve "$F_PASSWORD" Authentication__LocalAdminPassword 'Admin password' secret)"
 MODEL="$F_MODEL"; [ -z "$MODEL" ] && MODEL="$(getenv DEVKIT_MODEL)"
 if [ -z "$MODEL" ]; then
-  [ "$NONINTERACTIVE" = 1 ] && { echo "Missing DEVKIT_MODEL — pass --model 1|2|3|4|anthropic|bedrock|gateway|bedrock-instance-role." >&2; exit 1; }
+  [ "$NONINTERACTIVE" = 1 ] && { echo "Missing DEVKIT_MODEL — pass --model 1|2|3|4|5|anthropic|bedrock|gateway|bedrock-instance-role|subscription." >&2; exit 1; }
   # On an EC2 dev box the instance profile is usually already allowed to invoke Bedrock, in which
   # case no keys are needed at all — offer that as option 4 but never preselect it. Options 1–3 are
   # fixed regardless of the probe so `--model 3` always means the same thing on every machine.
@@ -872,9 +880,9 @@ if [ -z "$MODEL" ]; then
           printf '      could not confirm containers can reach IMDS (%s); if the agent later fails to\n' "${CONTAINER_IMDS#unknown:}" >&2
           printf '      authenticate, raise the IMDSv2 hop limit to 2 (see README).\n' >&2 ;;
     esac
-    printf 'Select LLM provider:\n  1) anthropic (API key)\n  2) bedrock (AWS keys)\n  3) LLM gateway (OpenRouter, Bifrost, LiteLLM, … — any Anthropic-compatible endpoint)\n  4) bedrock via this EC2 instance role — %s @ %s, no keys%s\n' \
+    printf 'Select LLM provider:\n  1) anthropic (API key)\n  2) bedrock (AWS keys)\n  3) LLM gateway (OpenRouter, Bifrost, LiteLLM, … — any Anthropic-compatible endpoint)\n  4) bedrock via this EC2 instance role — %s @ %s, no keys%s\n  5) Claude Code subscription (your own, via `claude setup-token`)\n' \
       "$AWS_ROLE" "$BEDROCK_REGION" "$IMDS_CAVEAT" >&2
-    read -r -p 'Enter 1, 2, 3 or 4: ' MODEL
+    read -r -p 'Enter 1, 2, 3, 4 or 5: ' MODEL
   else
     if [ "$BEDROCK_AVAILABLE" = 1 ]; then
       # Host reached IMDS but a container couldn't — almost always the IMDSv2 PUT-response hop limit
@@ -884,13 +892,13 @@ if [ -z "$MODEL" ]; then
     else
       echo "    ✗ no usable instance-role Bedrock access${BEDROCK_REASON:+ ($BEDROCK_REASON)}." >&2
     fi
-    printf 'Select LLM provider:\n  1) anthropic (API key)\n  2) bedrock (AWS keys)\n  3) LLM gateway (OpenRouter, Bifrost, LiteLLM, … — any Anthropic-compatible endpoint)\n' >&2
-    read -r -p 'Enter 1, 2 or 3: ' MODEL
+    printf 'Select LLM provider:\n  1) anthropic (API key)\n  2) bedrock (AWS keys)\n  3) LLM gateway (OpenRouter, Bifrost, LiteLLM, … — any Anthropic-compatible endpoint)\n  5) Claude Code subscription (your own, via `claude setup-token`)\n' >&2
+    read -r -p 'Enter 1, 2, 3 or 5: ' MODEL
   fi
 fi
 MODEL="$(printf '%s' "$MODEL" | tr '[:upper:]' '[:lower:]')"
 # accept numeric from menu/--model/.env
-case "$MODEL" in 1) MODEL=anthropic;; 2) MODEL=bedrock;; 3) MODEL=gateway;; 4) MODEL=bedrock-instance-role;; esac
+case "$MODEL" in 1) MODEL=anthropic;; 2) MODEL=bedrock;; 3) MODEL=gateway;; 4) MODEL=bedrock-instance-role;; 5) MODEL=subscription;; esac
 
 setenv Authentication__LocalAdminEmail "$EMAIL"
 setenv Authentication__LocalAdminPassword "$PASSWORD"
@@ -905,7 +913,8 @@ setenv AIStudio__IsMasterDisabled true
 if [ "$MODEL" = anthropic ]; then
   KEY="$(resolve "$F_ANTHROPIC" ANTHROPIC_API_KEY 'Anthropic API key' secret)"
   setenv ANTHROPIC_API_KEY "$KEY"
-  setenv CLAUDE_MODEL "claude-sonnet-4-6"
+  setenv CLAUDE_MODEL "claude-sonnet-5"
+  setenv CLAUDE_EXTRA_MODELS "claude-opus-5"
   # A gateway URL left over from a previous provider choice would make the agent send this key to the
   # gateway instead of api.anthropic.com (key + URL = "proxy in front of Anthropic"). Warn, don't clear.
   [ -z "$(getenv ANTHROPIC_BASE_URL)" ] || echo "    note: ANTHROPIC_BASE_URL is still set in .env — the agent will send your Anthropic key THERE, not to api.anthropic.com. Clear it (or ./run.sh --reset) unless that's intended."
@@ -954,6 +963,7 @@ elif [ "$MODEL" = bedrock-instance-role ]; then
   for k in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN ANTHROPIC_API_KEY ANTHROPIC_BASE_URL; do setenv "$k" ""; done
   setenv AWS_REGION "$RG"
   setenv CLAUDE_MODEL "$BEDROCK_PROBE_MODEL"
+  setenv CLAUDE_EXTRA_MODELS "$BEDROCK_EXTRA_MODELS"
   echo "    using EC2 instance role${AWS_ROLE:+ ($AWS_ROLE)} for Bedrock in $RG — no keys stored in .env."
 elif [ "$MODEL" = bedrock ]; then
   AK="$(resolve "$F_AWS_KEY" AWS_ACCESS_KEY_ID 'AWS access key id')"
@@ -961,7 +971,8 @@ elif [ "$MODEL" = bedrock ]; then
   ST="$F_AWS_TOKEN"; [ -z "$ST" ] && ST="$(getenv AWS_SESSION_TOKEN)"
   RG="$F_AWS_REGION"; [ -z "$RG" ] && RG="$(getenv AWS_REGION)"; [ -z "$RG" ] && RG="us-west-2"
   setenv AWS_ACCESS_KEY_ID "$AK"; setenv AWS_SECRET_ACCESS_KEY "$SK"; setenv AWS_SESSION_TOKEN "$ST"; setenv AWS_REGION "$RG"
-  setenv CLAUDE_MODEL "us.anthropic.claude-sonnet-4-6"
+  setenv CLAUDE_MODEL "$BEDROCK_PROBE_MODEL"
+  setenv CLAUDE_EXTRA_MODELS "$BEDROCK_EXTRA_MODELS"
   # The agent picks its provider by precedence ANTHROPIC_API_KEY → gateway → Azure → Bedrock (docker-compose.yml),
   # so a leftover Anthropic key silently wins over Bedrock. We no longer clear it (only --reset does) — warn.
   [ -z "$(getenv ANTHROPIC_API_KEY)" ] || echo "    note: ANTHROPIC_API_KEY is still set in .env — the agent prefers it over Bedrock. Clear it (or ./run.sh --reset) to force Bedrock."
@@ -969,22 +980,13 @@ elif [ "$MODEL" = bedrock ]; then
 elif [ "$MODEL" = gateway ]; then
   # Prompts, validation and the load-bearing ANTHROPIC_API_KEY blank all live in scripts/_provider_gateway.sh.
   provider_gateway_configure || exit 1
+elif [ "$MODEL" = subscription ]; then
+  # Prompt, validation and the load-bearing ANTHROPIC_API_KEY/ANTHROPIC_BASE_URL blanks live in
+  # scripts/_provider_subscription.sh.
+  provider_subscription_configure || exit 1
 else
-  echo "Unknown model '$MODEL' (use anthropic, bedrock, gateway, or bedrock-instance-role)." >&2; exit 1
+  echo "Unknown model '$MODEL' (use anthropic, bedrock, gateway, bedrock-instance-role, or subscription)." >&2; exit 1
 fi
-
-# ── usage metrics ────────────────────────────────────────────────────────────
-# Deliberately the LAST prompt: a consent question should stand on its own, not sit wedged between
-# "pick a provider" and "paste your API key".
-#
-# Opted in by default. Opting out mounts an nginx fragment that strips the Mixpanel key from the
-# served UI bundle, so the browser never receives it. Both keys are written on EVERY run: compose
-# falls back to metrics-off.conf when METRICS_CONF is unset or blank, so an opted-in user must have
-# it written explicitly. Re-deriving it every run also makes flipping DUPLO_USAGE_METRICS in .env by
-# hand and re-running a supported post-install opt-out.
-METRICS="$(metrics_resolve "$F_METRICS" "$(getenv DUPLO_USAGE_METRICS)" "$NONINTERACTIVE")"
-setenv DUPLO_USAGE_METRICS "$METRICS"
-setenv METRICS_CONF "$(metrics_conf_for "$METRICS")"
 
 # Optional image-tag overrides
 [ -n "$F_STUDIO_TAG" ] && setenv STUDIO_TAG "$F_STUDIO_TAG"
@@ -1048,9 +1050,10 @@ d=json.load(sys.stdin); items=d.get("data",{}); items=items.get("items",items) i
 print(next((w["id"] for w in (items or []) if w.get("name")=="extension-dev"), ""))' 2>/dev/null || true)"
   if [ -z "$WS" ]; then
     echo "==> Creating 'extension-dev' workspace…"
-    WS="$(curl -fsS --max-time 10 -X POST "$API/v1/aiservicedesk/admin/data/workspaces" \
-        -H "Authorization: Bearer $TOK" -H "Content-Type: application/json" --data '{"name":"extension-dev"}' \
-        | python3 -c 'import sys,json;print(json.load(sys.stdin)["data"]["id"])')"
+    # Everything after this needs the workspace, so a refused create (most often an expired license —
+    # the studio answers 400 license_limit_exceeded) stops here with the server's reason, not a traceback.
+    WS="$(studio_create_id "$API/v1/aiservicedesk/admin/data/workspaces" '{"name":"extension-dev"}')" \
+      || { echo "Could not create the extension-dev workspace — fix the cause above and re-run ./run.sh." >&2; exit 1; }
   fi
   setenv EXTENSION_DEV_WORKSPACE_ID "$WS"
 fi
@@ -1074,10 +1077,9 @@ if ! data_exists "$PS" permissionset; then
   PS="$(data_id_by_name permissionset extension-dev-access)"
   if [ -z "$PS" ]; then
     echo "==> Creating 'extension-dev-access' permission set…"
-    PS="$(curl -fsS --max-time 10 -X POST "$API/v1/aiservicedesk/admin/data/permissionset" \
-        -H "Authorization: Bearer $TOK" -H "Content-Type: application/json" \
-        --data "$(W="$WS" python3 -c 'import json,os;print(json.dumps({"name":"extension-dev-access","allowedWorkspaces":[{"workspaceId":os.environ["W"]}]}))')" \
-        | python3 -c 'import sys,json;print(json.load(sys.stdin)["data"]["id"])')"
+    PS="$(studio_create_id "$API/v1/aiservicedesk/admin/data/permissionset" \
+        "$(W="$WS" python3 -c 'import json,os;print(json.dumps({"name":"extension-dev-access","allowedWorkspaces":[{"workspaceId":os.environ["W"]}]}))')")" \
+      || echo "    (permission set not created — UI access to the workspace must be granted by hand)" >&2
   fi
   [ -n "$PS" ] && setenv EXTENSION_DEV_PERMSET_ID "$PS"
 fi
@@ -1086,10 +1088,9 @@ if ! data_exists "$PSG" permissionsetgroup; then
   PSG="$(data_id_by_name permissionsetgroup extension-dev-group)"
   if [ -z "$PSG" ]; then
     echo "==> Assigning $EMAIL to the permission set…"
-    PSG="$(curl -fsS --max-time 10 -X POST "$API/v1/aiservicedesk/admin/data/permissionsetgroup" \
-        -H "Authorization: Bearer $TOK" -H "Content-Type: application/json" \
-        --data "$(P="$PS" E="$EMAIL" python3 -c 'import json,os;print(json.dumps({"name":"extension-dev-group","permissionSets":[os.environ["P"]],"userStringHandle":[os.environ["E"]]}))')" \
-        | python3 -c 'import sys,json;print(json.load(sys.stdin)["data"]["id"])')"
+    PSG="$(studio_create_id "$API/v1/aiservicedesk/admin/data/permissionsetgroup" \
+        "$(P="$PS" E="$EMAIL" python3 -c 'import json,os;print(json.dumps({"name":"extension-dev-group","permissionSets":[os.environ["P"]],"userStringHandle":[os.environ["E"]]}))')")" \
+      || echo "    (permission set group not created — assign $EMAIL to the permission set by hand)" >&2
   fi
   [ -n "$PSG" ] && setenv EXTENSION_DEV_PERMSETGROUP_ID "$PSG"
 fi
@@ -1130,20 +1131,23 @@ fi
 
 # ── register the model the agent runs on as the System default (every provider) ───
 # The studio registers no LLM model of its own, so without this the ticket LLM picker has nothing to
-# offer whichever provider you picked. register-llm.sh reads CLAUDE_MODEL from .env — already set above
-# to the right id per provider (bare claude-* for direct Anthropic, us.anthropic.* for either Bedrock
-# mode) — so the same call registers the correct variant and makes it the sole System default.
+# offer whichever provider you picked. register-llm.sh reads CLAUDE_MODEL + CLAUDE_EXTRA_MODELS from .env
+# — already set above to the right ids per provider (bare claude-* for direct Anthropic, us.anthropic.*
+# for either Bedrock mode) — so the same call registers the correct variants, makes them the only System
+# models, and CLAUDE_MODEL the default.
 LLM_LINE=""
 case "$MODEL" in
   anthropic)             LLM_DESC="direct Anthropic" ;;
   bedrock)               LLM_DESC="AWS Bedrock" ;;
   gateway)               LLM_DESC="LLM Gateway" ;;
+  subscription)          LLM_DESC="Claude Code subscription" ;;
   bedrock-instance-role) LLM_DESC="AWS Bedrock via EC2 instance role" ;;
 esac
 echo "==> Registering $(getenv CLAUDE_MODEL) ($LLM_DESC) as the System default LLM…"
 if LLM_PROVIDER_LABEL="$LLM_DESC" ./scripts/register-llm.sh; then
   LLM_LINE="
   LLM       System default → $(getenv CLAUDE_MODEL) ($LLM_DESC)"
+  [ -z "$(getenv CLAUDE_EXTRA_MODELS)" ] || LLM_LINE="$LLM_LINE; also available: $(getenv CLAUDE_EXTRA_MODELS)"
 else
   echo "    (LLM registration failed — run ./scripts/register-llm.sh manually)"
 fi
@@ -1165,15 +1169,10 @@ case "$KB_RC" in
   *) echo "    (knowledge base setup failed — run ./scripts/register-qdrant.sh manually)" ;;
 esac
 
-if [ "$METRICS" = 1 ]; then
-  METRICS_STATE="on (opted in)"
-else
-  METRICS_STATE="off (opted out — the UI is served without the Mixpanel key)"
-fi
-
 PROVIDER_DESC="$MODEL"
 [ "$MODEL" = bedrock-instance-role ] && PROVIDER_DESC="bedrock via EC2 instance role${AWS_ROLE:+ ($AWS_ROLE)} @ $(getenv AWS_REGION) — no keys in .env"
 [ "$MODEL" = gateway ] && PROVIDER_DESC="LLM gateway @ $(getenv ANTHROPIC_BASE_URL)"
+[ "$MODEL" = subscription ] && PROVIDER_DESC="Claude Code subscription (model $(getenv CLAUDE_MODEL)) — your own token, local dev only"
 
 cat <<EOF
 
@@ -1183,8 +1182,6 @@ cat <<EOF
   Workspace extension-dev  ($WS)  ·  agent registered + attached
   Token     DUPLO_ADMIN_TOKEN set in .env (permanent)
   License   ${LICENSE_STATUS:-set in .env} (Licensing__Token)$PERSONA_LINE$LLM_LINE$KB_LINE$TF_EXT_LINE
-  Metrics   $METRICS_STATE
-            change: set DUPLO_USAGE_METRICS=0|1 in .env, re-run ./run.sh, reload the UI tab  ·  see PRIVACY.md
 
 Build & deploy your extension (scripts read the target from .env — no DUPLO_BASE= prefix needed):
   ./scripts/build-extension.sh  extensions/<name>               # your extensions live in extensions/<name>/

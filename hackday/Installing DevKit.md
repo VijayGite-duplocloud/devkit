@@ -75,7 +75,7 @@ extension directory — do it now so your Hack Day work has somewhere to live.
 > request is discarded and your trial is still intact.
 
 The remaining prompts: `Admin password:` (stored in the database — editing `.env` later won't change it),
-`Select LLM provider:` (`1` anthropic, `2` bedrock) and its key, and `Opt out of usage metrics? [y/N]:`.
+and `Select LLM provider:` (`1` anthropic, `2` bedrock) and its key.
 
 **4. Sign in.** `./run.sh` prints `✔ Platform ready` when the stack is up. Go to
 **<http://localhost:4210>** and sign in with that email and password.

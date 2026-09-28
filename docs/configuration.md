@@ -164,13 +164,20 @@ Managed by `./run.sh` — leave them blank in a fresh `.env` and let it prompt.
 ## LLM provider
 
 `run.sh` sets these from your `--model` choice. Precedence in the agent is `ANTHROPIC_API_KEY` → gateway
-(`ANTHROPIC_BASE_URL` with the key **empty**) → Azure → Bedrock.
+(`ANTHROPIC_BASE_URL` with the key **empty**) → Azure → `CLAUDE_CODE_OAUTH_TOKEN` → Bedrock.
+
+Subscription auth sits next-to-last on purpose: a token exported in someone's shell must never displace a
+provider that was configured deliberately. The cost of that ordering is that the `subscription` arm has to
+blank `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL`, or either would win the chain and the token would never
+be read.
 
 | Variable | Effect |
 | --- | --- |
-| `DEVKIT_MODEL` | `anthropic`, `bedrock`, `gateway`, or `bedrock-instance-role`. Chooses which credential block below is used. |
-| `CLAUDE_MODEL` | The model id the agent calls. `claude-sonnet-4-6` for Anthropic; `us.anthropic.claude-sonnet-4-6` for either Bedrock mode; for `gateway`, whatever the gateway calls it (OpenRouter: `anthropic/claude-sonnet-4.6`). Not interchangeable — the direct Anthropic API rejects the `us.*` prefix and Bedrock requires it. |
+| `DEVKIT_MODEL` | `anthropic`, `bedrock`, `gateway`, `bedrock-instance-role`, or `subscription`. Chooses which credential block below is used. |
+| `CLAUDE_MODEL` | The model id the agent calls, and the System default in the ticket LLM picker. `claude-sonnet-5` for Anthropic; `us.anthropic.claude-sonnet-5` for either Bedrock mode; for `gateway`, whatever the gateway calls it (OpenRouter: `anthropic/claude-sonnet-5`); for `subscription`, a first-party id the Claude CLI accepts. Not interchangeable — the direct Anthropic API rejects the `us.*` prefix and Bedrock requires it. |
+| `CLAUDE_EXTRA_MODELS` | Comma-separated extra model ids registered alongside `CLAUDE_MODEL` so they show in the picker. `claude-opus-5` for Anthropic and `subscription` (both call the first-party API with bare ids), `us.anthropic.claude-opus-5` for Bedrock, blank for `gateway` (a gateway names models its own way, so only the id you supplied is registered). Registration-only; the agent runs on `CLAUDE_MODEL`. |
 | `ANTHROPIC_API_KEY` | Direct Anthropic API key. Blanked by `gateway`: key **and** URL together mean "proxy in front of the real Anthropic API", a different agent code path that would send the gateway's token nowhere useful. |
+| `CLAUDE_CODE_OAUTH_TOKEN` | `subscription`: a long-lived Claude Code token from `claude setup-token`, run on your own machine (it needs a browser). Not the short-lived credential in your OS keychain, and not an `sk-ant-api…` API key — those are three different auth schemes to the Claude CLI. Runs the agent on your personal Claude Code subscription, so usage counts against your own limits and every ticket authenticates as you: local development only, never a shared stack. Ticket titles are not generated on this path, since the title LLM is Bedrock-only. |
 | `ANTHROPIC_BASE_URL` | `gateway`: base URL of any Anthropic-compatible endpoint — OpenRouter, Bifrost, LiteLLM, Snowflake Cortex. The gateway holds the real provider credentials; Bedrock is never enabled on this path. |
 | `ANTHROPIC_AUTH_TOKEN` | `gateway`: bearer token / API key the gateway expects. Blank for an unauthenticated gateway (a local Bifrost, say). |
 | `CLAUDE_CODE_MAX_CONTEXT_TOKENS` | `gateway` only — `run.sh` sets **262144** when you pick it. Declares the model's real context window. A gateway usually serves model ids the Claude CLI doesn't recognise, and an unrecognised id has no known window, so long sessions fail with a 400 instead of compacting. Override with `--gateway-max-context-tokens`, or edit `.env` (re-runs keep whatever is there). Not set by any other provider — those name models the CLI already knows. |
@@ -241,23 +248,10 @@ works against the API.
 
 ## Usage metrics
 
-The portal sends product usage metrics to DuploCloud via Mixpanel, tied to the email you sign in with.
-[PRIVACY.md](../PRIVACY.md) lists exactly what is and is not collected.
-
-| Variable | Default | Effect |
-| --- | --- | --- |
-| `DUPLO_USAGE_METRICS` | *(blank — `run.sh` prompts on first run)* | `1` opted in, `0` opted out. Ships blank so a first run actually asks. |
-| `METRICS_CONF` | *(derived)* | The nginx fragment implementing the choice — `metrics-on.conf` or `metrics-off.conf`. **Do not hand-edit; changing it alone does nothing.** `run.sh` re-derives it from `DUPLO_USAGE_METRICS` on every run. |
-
-`./run.sh` prompts on first run and the default is opted **in**. Non-interactively, use `--no-metrics` or
-`--metrics`; with no TTY the default applies silently rather than blocking.
-
-**To change your mind:** set `DUPLO_USAGE_METRICS` to `0` or `1`, re-run `./run.sh`, and reload any open UI
-tab — a tab already loaded keeps using the JavaScript it fetched before the change.
-
-The opt-out is enforced at the proxy, not by trusting the UI. The Mixpanel key is compiled into the
-published image's Angular bundle at build time, so `run.sh` mounts an nginx config that rewrites the served
-bundle. Opted out, the key never reaches your browser and the analytics library is never initialized.
+The portal UI asks for consent to send product usage metrics to DuploCloud via Mixpanel. That choice is
+made in the UI, not by `run.sh` — there is no dev-kit prompt, flag, or `.env` variable for it, and
+`nginx/default.conf` serves the published UI bundle unmodified. [PRIVACY.md](../PRIVACY.md) lists exactly
+what is and is not collected.
 
 ### `.env.defaults`
 

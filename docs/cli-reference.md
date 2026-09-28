@@ -21,7 +21,8 @@ it is safe and silent.
 ./run.sh --email you@yourcompany.com --password 'pw' --model anthropic --anthropic-key sk-ant-...
 ./run.sh --model bedrock --aws-access-key-id AKIA... --aws-secret-access-key ... [--aws-session-token ...] [--aws-region us-west-2]
 ./run.sh --model bedrock-instance-role [--aws-region us-east-1]
-./run.sh --model gateway --gateway-url https://openrouter.ai/api --gateway-token sk-or-... [--gateway-model anthropic/claude-sonnet-4.6]
+./run.sh --model gateway --gateway-url https://openrouter.ai/api --gateway-token sk-or-... [--gateway-model anthropic/claude-sonnet-5]
+./run.sh --model subscription --subscription-token sk-ant-oat01-... [--subscription-model claude-sonnet-5]
 ```
 
 On an EC2 host the provider prompt first probes whether the instance role can actually invoke Bedrock
@@ -35,11 +36,13 @@ On an EC2 host the provider prompt first probes whether the instance role can ac
 | `--non-interactive`, `-y` | Never prompt. A missing required value is an error instead: `Missing <KEY> — pass its flag (non-interactive).` |
 | `--email <addr>` | Admin email (your UI login, and the address the license is issued to). Must be a **work** address; personal domains are rejected by the license server. |
 | `--password <pw>` | Admin password. |
-| `--model <1\|2\|3\|4\|anthropic\|bedrock\|gateway\|bedrock-instance-role>` | LLM provider. `1` is anthropic, `2` is bedrock, `3` is gateway, `4` is bedrock-instance-role. Option `4` is only offered at the prompt when the probe proves the role can invoke Bedrock, but `--model bedrock-instance-role` can be passed directly — it then probes and **fails** rather than falling back, since you asked for it explicitly. |
+| `--model <1\|2\|3\|4\|5\|anthropic\|bedrock\|gateway\|bedrock-instance-role\|subscription>` | LLM provider. `1` is anthropic, `2` is bedrock, `3` is gateway, `4` is bedrock-instance-role, `5` is subscription. Option `4` is only offered at the prompt when the probe proves the role can invoke Bedrock, but `--model bedrock-instance-role` can be passed directly — it then probes and **fails** rather than falling back, since you asked for it explicitly. |
 | `--anthropic-key <key>` | Anthropic API key. |
+| `--subscription-token <token>` | `subscription` only. A long-lived Claude Code token, minted with `claude setup-token` on your own machine — it opens a browser, so it cannot be done from inside the dev kit. Expect `sk-ant-oat01-…`; an `sk-ant-api…` key pasted here is caught with a note, since it would otherwise be sent as a bearer token and fail with a puzzling 401. |
+| `--subscription-model <id>` | `subscription` only. A **bare** first-party model id (`claude-sonnet-5`, `claude-opus-5`). Defaults to `claude-sonnet-5`. A `us.anthropic.*` inference-profile id left over from a Bedrock run is rejected by the first-party API, so it is swapped for the default with a note rather than failing. |
 | `--gateway-url <url>` | `gateway` only. Base URL of an Anthropic-compatible LLM gateway — OpenRouter (`https://openrouter.ai/api`), a Bifrost running on this machine (`http://host.docker.internal:8080` — the agent runs in a container, so `localhost` would be the container itself), LiteLLM, Snowflake Cortex. Without `/v1/messages`; a trailing slash is stripped. Must start with `http://` or `https://`. |
 | `--gateway-token <token>` | `gateway` only. The API key / bearer token the gateway expects. Optional: omit for an unauthenticated gateway. Pass `none` to blank a token saved from an earlier run. |
-| `--gateway-model <id>` | `gateway` only. The model name **as the gateway lists it** (OpenRouter: `anthropic/claude-sonnet-4.6`; a pass-through gateway usually takes the plain `claude-sonnet-4-6`). Defaults to `claude-sonnet-4-6`. |
+| `--gateway-model <id>` | `gateway` only. The model name **as the gateway lists it** (OpenRouter: `anthropic/claude-sonnet-5`; a pass-through gateway usually takes the plain `claude-sonnet-5`). Defaults to `claude-sonnet-5`. |
 | `--gateway-max-context-tokens <n>` | `gateway` only, never prompted. Overrides `CLAUDE_CODE_MAX_CONTEXT_TOKENS`, which `gateway` sets to **262144** by default (a gateway usually serves model ids the Claude CLI doesn't recognise, and those have no known context window). |
 | `--gateway-compact-window <n>` | `gateway` only, never prompted. Overrides `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, default **200000**. Keep it below the max-context value. |
 | `--gateway-disable-betas <0\|1>` | `gateway` only, never prompted, unset by default. Sets `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS` — needed for Snowflake Cortex. See [configuration](configuration.md#llm-provider). |
@@ -47,8 +50,6 @@ On an EC2 host the provider prompt first probes whether the instance role can ac
 | `--aws-secret-access-key <key>` | Bedrock credentials. |
 | `--aws-session-token <token>` | Bedrock session token, if you use temporary credentials. |
 | `--aws-region <region>` | Bedrock region. Defaults to `us-west-2` for `bedrock`. For `bedrock-instance-role` it skips the probe and uses this region directly. |
-| `--no-metrics` | Opt out of usage metrics. The default is opted **in**. |
-| `--metrics` | Opt back in. |
 | `--studio-tag <tag>` | Override and **pin** `STUDIO_TAG`. It stops tracking `.env.example`. |
 | `--ui-tag <tag>` | Override and pin `UI_TAG`. |
 | `--agent-tag <tag>` | Override and pin `AGENT_TAG`. |
@@ -65,7 +66,7 @@ On an EC2 host the provider prompt first probes whether the instance role can ac
 5. Obtains a license for that address if `Licensing__Token` is empty — see
    [configuration.md § Licensing](configuration.md#licensing). This is where a run can wait on you: the
    license server emails the address a link, and the run polls for up to 2 minutes after it is clicked.
-6. Resolves password, LLM provider, and the metrics choice: flag, then `.env`, then prompt.
+6. Resolves password and LLM provider: flag, then `.env`, then prompt.
 7. Generates `Encryption__MasterKey` and `Authentication__JwtSharedSecret` once, if unset.
 8. `docker compose pull`, then `docker compose up -d`.
 9. Waits up to ~4.5 minutes for the studio to answer on `/healthz` — an anonymous route, because this
@@ -126,7 +127,7 @@ combine.
 `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `Encryption__MasterKey`,
 `Authentication__JwtSharedSecret`, `DUPLO_ADMIN_TOKEN`, `EXTENSION_DEV_WORKSPACE_ID`,
 `EXTENSION_DEV_PERMSET_ID`, `EXTENSION_DEV_PERMSETGROUP_ID`, `QDRANT_PROVIDER_ID`, `QDRANT_SCOPE_ID`,
-`QDRANT_COLLECTION_ID`, `DUPLO_USAGE_METRICS`, `METRICS_CONF`.
+`QDRANT_COLLECTION_ID`.
 
 `--reset` is the **only** thing that clears provider credentials — normal restarts never touch them, so
 use it to switch providers cleanly. Blanking `AWS_REGION` is also what forces `bedrock-instance-role` to
@@ -177,11 +178,11 @@ ERROR: extension naming validation failed — fix the ✗ items above (reference
 
 | Script | What it does |
 | --- | --- |
-| `switch-llm.sh <anthropic\|bedrock\|bedrock-instance-role\|gateway\|status>` | Switch the running agent's LLM provider in place — no `--reset`, no DB wipe, no re-licensing. Stashes the outgoing provider's credentials in `.env` as `_STASH_<KEY>=` (restored automatically if you switch back) and blanks the live ones, since the agent picks its provider by precedence and a leftover key would otherwise keep winning. Recreates `claude-code-agent` and re-runs `register-llm.sh`. `status` shows the active provider and which others have a usable stash. Same flags as `run.sh`'s provider arms (`--gateway-url`, `--aws-access-key-id`, etc.) — see `--help`. |
+| `switch-llm.sh <anthropic\|bedrock\|bedrock-instance-role\|gateway\|subscription\|status>` | Switch the running agent's LLM provider in place — no `--reset`, no DB wipe, no re-licensing. Stashes the outgoing provider's credentials in `.env` as `_STASH_<KEY>=` (restored automatically if you switch back) and blanks the live ones, since the agent picks its provider by precedence and a leftover key would otherwise keep winning. Recreates `claude-code-agent` and re-runs `register-llm.sh`. `status` shows the active provider and which others have a usable stash. Same flags as `run.sh`'s provider arms (`--gateway-url`, `--aws-access-key-id`, etc.) — see `--help`. |
 | `register-agent.sh [workspace-id]` | Register the bundled `claude-code-agent` and attach it to a workspace. Provisioning tickets are assigned from the workspace's agent list, so a resource only provisions once its workspace has an agent. Local stack only. |
-| `register-llm.sh [model-id]` | Register the model the agent actually runs on and make it the sole System default, so the ticket LLM picker offers exactly that model. Provider-agnostic: defaults to `CLAUDE_MODEL`, which `run.sh` sets per provider — a bare id for direct Anthropic, a `us.anthropic.*` inference-profile id for either Bedrock mode. The two are not interchangeable. `LLM_PROVIDER_LABEL` suffixes the display name. |
+| `register-llm.sh [default-id [extra-id...]]` | Register the models the agent can run on and make them the only System models, with the first as the default — so the ticket LLM picker offers exactly those. Provider-agnostic: defaults to `CLAUDE_MODEL` + `CLAUDE_EXTRA_MODELS`, which `run.sh` sets per provider — bare ids for direct Anthropic (`claude-sonnet-5`, `claude-opus-5`), `us.anthropic.*` inference-profile ids for either Bedrock mode. The two are not interchangeable. `LLM_PROVIDER_LABEL` suffixes the display names. |
 | `register-qdrant.sh [workspace-id]` | Turn the `qdrant` container into a usable Knowledge Base: register it as a `vectorDatabase` provider, create a `qdrant` scope over it so the provider appears in the ticket scope picker, attach that scope to the workspace, and create an empty `devkit-docs` collection owned by it. The workspace defaults to `EXTENSION_DEV_WORKSPACE_ID`; with none the collection is created admin-managed. The collection provisions asynchronously — it shows Pending, then Ready about a minute later. Uploading documents into it additionally needs AWS Bedrock credentials with access to `cohere.embed-v4`, the seeded embedding model; without them the collection still reaches Ready but every upload fails (see [configuration.md](configuration.md#knowledge-base)). `QDRANT_INTERNAL_URL` overrides the Qdrant URL, which must be compose-network-resolvable (`http://qdrant:6333`) because the studio is what dials it. |
-| `detect-bedrock.sh [model-id] [region]` | Probe whether this host is an EC2 instance whose IAM role can invoke Bedrock. Makes a real 1-token Converse call against the model (default `us.anthropic.claude-sonnet-4-6`) and separately checks a container can reach IMDS. Needs only `python3` and `curl` — SigV4 is signed with the standard library, no AWS CLI or boto3. Prints `BEDROCK_REGION`, `AWS_ROLE`, `CONTAINER_IMDS` (`ok` / `blocked` / `unknown:<why>`), and `BEDROCK_REASON` as `KEY=value` lines for `run.sh` to consume; safe to run standalone. |
+| `detect-bedrock.sh [model-id] [region]` | Probe whether this host is an EC2 instance whose IAM role can invoke Bedrock. Makes a real 1-token Converse call against the model (default `us.anthropic.claude-sonnet-5`) and separately checks a container can reach IMDS. Needs only `python3` and `curl` — SigV4 is signed with the standard library, no AWS CLI or boto3. Prints `BEDROCK_REGION`, `AWS_ROLE`, `CONTAINER_IMDS` (`ok` / `blocked` / `unknown:<why>`), and `BEDROCK_REASON` as `KEY=value` lines for `run.sh` to consume; safe to run standalone. |
 | `setup-google-auth.sh [--force] [--grant --sa <sa-email>]` | One-time setup for keyless GCP scopes. Ensures `gcloud auth application-default login` has run — plain `gcloud auth login` does not write the ADC file the studio reads. |
 | `refresh-common-lib.sh <tarball>` | Refresh the vendored `@duplocloud-internal/ng-common-lib` tarball across every sample and the skill template. See [UPGRADING-ng-common-lib.md](UPGRADING-ng-common-lib.md). |
 
