@@ -145,11 +145,6 @@ services:
     volumes:
       # Published image serves the SPA only; this conf proxies API prefixes to the studio (same-origin, no CORS).
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-      # Selected by run.sh from the DUPLO_USAGE_METRICS answer: metrics-on.conf inserts the
-      # Mixpanel key, metrics-off.conf strips it. Included by default.conf. The fallback is
-      # metrics-off.conf so a stack brought up without run.sh (no METRICS_CONF in .env) fails
-      # closed — no key — rather than tracking someone who never answered. See PRIVACY.md.
-      - ./nginx/${METRICS_CONF:-metrics-off.conf}:/etc/nginx/metrics.conf:ro
     depends_on:
       - duplo-ai-studio
 

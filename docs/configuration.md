@@ -248,23 +248,10 @@ works against the API.
 
 ## Usage metrics
 
-The portal sends product usage metrics to DuploCloud via Mixpanel, tied to the email you sign in with.
-[PRIVACY.md](../PRIVACY.md) lists exactly what is and is not collected.
-
-| Variable | Default | Effect |
-| --- | --- | --- |
-| `DUPLO_USAGE_METRICS` | *(blank — `run.sh` prompts on first run)* | `1` opted in, `0` opted out. Ships blank so a first run actually asks. |
-| `METRICS_CONF` | *(derived)* | The nginx fragment implementing the choice — `metrics-on.conf` or `metrics-off.conf`. **Do not hand-edit; changing it alone does nothing.** `run.sh` re-derives it from `DUPLO_USAGE_METRICS` on every run. |
-
-`./run.sh` prompts on first run and the default is opted **in**. Non-interactively, use `--no-metrics` or
-`--metrics`; with no TTY the default applies silently rather than blocking.
-
-**To change your mind:** set `DUPLO_USAGE_METRICS` to `0` or `1`, re-run `./run.sh`, and reload any open UI
-tab — a tab already loaded keeps using the JavaScript it fetched before the change.
-
-The opt-out is enforced at the proxy, not by trusting the UI. The Mixpanel key is compiled into the
-published image's Angular bundle at build time, so `run.sh` mounts an nginx config that rewrites the served
-bundle. Opted out, the key never reaches your browser and the analytics library is never initialized.
+The portal UI asks for consent to send product usage metrics to DuploCloud via Mixpanel. That choice is
+made in the UI, not by `run.sh` — there is no dev-kit prompt, flag, or `.env` variable for it, and
+`nginx/default.conf` serves the published UI bundle unmodified. [PRIVACY.md](../PRIVACY.md) lists exactly
+what is and is not collected.
 
 ### `.env.defaults`
 

@@ -50,8 +50,6 @@ On an EC2 host the provider prompt first probes whether the instance role can ac
 | `--aws-secret-access-key <key>` | Bedrock credentials. |
 | `--aws-session-token <token>` | Bedrock session token, if you use temporary credentials. |
 | `--aws-region <region>` | Bedrock region. Defaults to `us-west-2` for `bedrock`. For `bedrock-instance-role` it skips the probe and uses this region directly. |
-| `--no-metrics` | Opt out of usage metrics. The default is opted **in**. |
-| `--metrics` | Opt back in. |
 | `--studio-tag <tag>` | Override and **pin** `STUDIO_TAG`. It stops tracking `.env.example`. |
 | `--ui-tag <tag>` | Override and pin `UI_TAG`. |
 | `--agent-tag <tag>` | Override and pin `AGENT_TAG`. |
@@ -68,7 +66,7 @@ On an EC2 host the provider prompt first probes whether the instance role can ac
 5. Obtains a license for that address if `Licensing__Token` is empty — see
    [configuration.md § Licensing](configuration.md#licensing). This is where a run can wait on you: the
    license server emails the address a link, and the run polls for up to 2 minutes after it is clicked.
-6. Resolves password, LLM provider, and the metrics choice: flag, then `.env`, then prompt.
+6. Resolves password and LLM provider: flag, then `.env`, then prompt.
 7. Generates `Encryption__MasterKey` and `Authentication__JwtSharedSecret` once, if unset.
 8. `docker compose pull`, then `docker compose up -d`.
 9. Waits up to ~4.5 minutes for the studio to answer on `/healthz` — an anonymous route, because this
@@ -129,7 +127,7 @@ combine.
 `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `Encryption__MasterKey`,
 `Authentication__JwtSharedSecret`, `DUPLO_ADMIN_TOKEN`, `EXTENSION_DEV_WORKSPACE_ID`,
 `EXTENSION_DEV_PERMSET_ID`, `EXTENSION_DEV_PERMSETGROUP_ID`, `QDRANT_PROVIDER_ID`, `QDRANT_SCOPE_ID`,
-`QDRANT_COLLECTION_ID`, `DUPLO_USAGE_METRICS`, `METRICS_CONF`.
+`QDRANT_COLLECTION_ID`.
 
 `--reset` is the **only** thing that clears provider credentials — normal restarts never touch them, so
 use it to switch providers cleanly. Blanking `AWS_REGION` is also what forces `bedrock-instance-role` to

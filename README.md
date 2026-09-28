@@ -100,7 +100,7 @@ guides.
 | [NOTICE](NOTICE) | The boundary: what Apache-2.0 covers, what it doesn't (the container images and the vendored UI library), and the third-party images. Apache-2.0 §4(d) requires you to keep it in any redistribution. |
 | [TERMS.md](TERMS.md) | The proprietary pieces that are *not* Apache-licensed: the **`quay.io/duplocloud/*` container images** (local development only, **no modification**, production requires a separate license) and the **vendored `@duplocloud-internal/ng-common-lib` tarball** (build against it and ship what your build bundles — nothing else). Also confirms you own your extensions. |
 | [SECURITY.md](SECURITY.md) | Reporting a vulnerability. **Email `ai-reporting@duplocloud.net` — don't open a public issue.** |
-| [PRIVACY.md](PRIVACY.md) | The usage metrics the UI sends, tied to your sign-in email — what is collected, what is not, and how to opt out at install (`./run.sh --no-metrics`) or afterwards (`DUPLO_USAGE_METRICS=0`, re-run). |
+| [PRIVACY.md](PRIVACY.md) | The usage metrics the UI sends if you opt in, tied to your sign-in email — what is collected and what is not. |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | PRs improving the *framework* are welcome. Your own extensions stay in your repo and don't belong upstream. |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Contributor Covenant 2.1 — the behaviour expected in issues and pull requests here, and what happens when it isn't met. Report a problem to `ai-reporting@duplocloud.net`. |
 | [SUPPORT.md](SUPPORT.md) | Where to get help and what to expect: **GitHub Issues, best effort, no SLA.** Also what belongs somewhere else. |

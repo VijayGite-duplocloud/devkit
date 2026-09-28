@@ -1,7 +1,0 @@
-# Triaged gitleaks findings — reviewed and confirmed not secrets.
-#
-# Mixpanel project token in the usage-metrics nginx config. Mixpanel project tokens are
-# client-side identifiers shipped in the browser bundle of every deployment (write-only:
-# they can submit events, not read data), so this value is public by design. The same
-# value also appears in nginx/metrics-off.conf, where it is stripped back out.
-38dac4f2deea579259f27e227a6cb863c594c179:nginx/metrics-on.conf:generic-api-key:10
