@@ -24,6 +24,21 @@
 # subscription, so it does not belong in a shared or deployed stack.
 
 SUBSCRIPTION_DEFAULT_MODEL="claude-sonnet-5"
+# Registered alongside the default so the ticket LLM picker offers both. Bare ids, same as the
+# `anthropic` arm: this path is the first-party API, which is exactly what those ids name.
+SUBSCRIPTION_EXTRA_MODELS="claude-opus-5"
+
+# Strip leading/trailing whitespace from a pasted token. Normalization, NOT validation: no valid
+# opaque bearer token has whitespace at its edges, so this cannot turn away a good token whatever
+# shape tokens take next. Deliberately no length or stricter format check here — per the header,
+# the token's shape is not a documented contract, and rejecting a valid future token with a
+# confident error message would be worse than the 401 it was meant to prevent.
+_subscription_trim() {
+  local s="$1"
+  s="${s#"${s%%[![:space:]]*}"}"
+  s="${s%"${s##*[![:space:]]}"}"
+  printf '%s' "$s"
+}
 
 # Every key this arm may write. run.sh --reset clears them all so switching providers is clean.
 # shellcheck disable=SC2034  # consumed by run.sh --reset
@@ -32,27 +47,25 @@ SUBSCRIPTION_KEYS=(CLAUDE_CODE_OAUTH_TOKEN)
 provider_subscription_configure() {
   local token model
   if [ "$NONINTERACTIVE" != 1 ] && [ -z "$F_SUBSCRIPTION_TOKEN" ] && [ -z "$(getenv CLAUDE_CODE_OAUTH_TOKEN)" ]; then
+    # Keep this short: the user has already chosen this path from the menu, so the rationale is
+    # settled — all they need now is the command to run and what to paste back.
     cat >&2 <<'TXT'
 
-  The agent embeds the Claude Code CLI, so it can run on your Claude Code subscription
-  instead of a separately-billed API key. Usage counts against your own Claude Code
-  limits, which makes this a local-development choice: the token authenticates as you.
-
-  Mint one on THIS machine (it opens a browser, so it cannot be done from inside the
-  dev kit), then paste it below:
+  Run the following command in another terminal:
 
       claude setup-token
 
-  That returns a long-lived token beginning sk-ant-oat01-. It is not the same as the
-  short-lived credential in your OS keychain, which expires in hours.
+  That returns a long-lived token beginning sk-ant-oat01- — copy it and paste it below.
 
 TXT
   fi
 
-  token="$F_SUBSCRIPTION_TOKEN"; [ -z "$token" ] && token="$(getenv CLAUDE_CODE_OAUTH_TOKEN)"
+  token="$(_subscription_trim "$F_SUBSCRIPTION_TOKEN")"
+  [ -z "$token" ] && token="$(_subscription_trim "$(getenv CLAUDE_CODE_OAUTH_TOKEN)")"
   if [ -z "$token" ]; then
     [ "$NONINTERACTIVE" = 1 ] && { echo "Missing subscription token — pass --subscription-token <token> (non-interactive), or run 'claude setup-token' to mint one." >&2; return 1; }
     read -rs -p "Claude Code subscription token (from 'claude setup-token'): " token; echo >&2
+    token="$(_subscription_trim "$token")"
   fi
   [ -n "$token" ] || { echo "No subscription token given — run 'claude setup-token' to mint one." >&2; return 1; }
   # Warn rather than reject: the prefix is not a documented contract, so a future token shape
@@ -80,11 +93,10 @@ TXT
 
   setenv CLAUDE_CODE_OAUTH_TOKEN "$token"
   setenv CLAUDE_MODEL "$model"
-  # Registration-only extras: what the ticket LLM picker offers next to CLAUDE_MODEL. A leftover
-  # us.anthropic.* / gateway-namespaced id from a previous provider would be rejected by the
-  # first-party API exactly as CLAUDE_MODEL is above, so clear it rather than carry it over —
-  # same reasoning as the gateway arm.
-  setenv CLAUDE_EXTRA_MODELS ""
+  # Registration-only extras: what the ticket LLM picker offers next to CLAUDE_MODEL. Overwritten
+  # rather than appended to, because a leftover us.anthropic.* / gateway-namespaced id from a
+  # previous provider would be rejected by the first-party API exactly as CLAUDE_MODEL is above.
+  setenv CLAUDE_EXTRA_MODELS "$SUBSCRIPTION_EXTRA_MODELS"
   setenv ANTHROPIC_API_KEY ""    # load-bearing — see header
   setenv ANTHROPIC_BASE_URL ""   # load-bearing — see header
 
@@ -97,21 +109,18 @@ TXT
   # BEFORE .env, so a key exported there still lands in the agent and wins the precedence chain —
   # silently, since the agent then just runs on it. Neither script sources .env, so anything
   # visible here came from the user's shell. Unset them in this process (this file is sourced, so
-  # that is the calling script, never the user's shell) so the compose calls that follow are
-  # correct; the warning covers a later manual `docker compose up`, which would still see them.
+  # that is the calling script, never the user's shell) so the compose calls that follow are correct.
+  #
+  # Silent by choice. This does NOT cover a later manual `docker compose up` from the same shell,
+  # which still sees the export and would hand it to the agent in place of the subscription token —
+  # a wrong-provider run with no error, just an unexpected bill.
   local shadow="" k
   for k in ANTHROPIC_API_KEY ANTHROPIC_BASE_URL; do
     [ -n "${!k-}" ] && shadow="$shadow $k"
   done
-  if [ -n "$shadow" ]; then
-    # shellcheck disable=SC2086  # word-split on purpose: one name per word
-    unset $shadow
-    echo "    WARNING: exported in your shell:$shadow — ignored for this run. docker compose prefers the" >&2
-    echo "             shell over .env, so a manual 'docker compose up' would hand it to the agent instead" >&2
-    echo "             of your subscription token. Remove it from your shell (unset$shadow) or profile." >&2
-  fi
+  # shellcheck disable=SC2086  # word-split on purpose: one name per word
+  [ -n "$shadow" ] && unset $shadow
 
   echo "    using your Claude Code subscription (model: $model)."
-  echo "    note: ticket titles are not generated on this path — the title LLM is Bedrock-only."
   [ -z "$(getenv AWS_ACCESS_KEY_ID)" ] || echo "    note: AWS keys are still set in .env — harmless (this path never uses them), but ./run.sh --reset clears them if you'd rather they were gone."
 }

@@ -94,14 +94,17 @@ reset_env; F_SUBSCRIPTION_TOKEN="sk-ant-oat01-abc"
 provider_subscription_configure >/dev/null 2>&1
 if [ -n "$(getenv AWS_REGION)" ]; then ok; else bad "AWS_REGION empty"; fi
 
-# compose resolves ${VAR:-} from the shell before .env, so the .env blanks can't defeat an exported key.
-t "warns when ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL are exported in the shell"
+# compose resolves ${VAR:-} from the shell before .env, so the .env blanks can't defeat an exported
+# key. The unset is silent by choice — it fixes the scripts' own compose calls, and the warning that
+# used to accompany it was noise on a path the user had just deliberately chosen.
+t "stays silent about exported ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL"
 reset_env; F_SUBSCRIPTION_TOKEN="sk-ant-oat01-abc"
 warn_out="$(ANTHROPIC_API_KEY=sk-ant-api03-shell ANTHROPIC_BASE_URL=https://x.example provider_subscription_configure 2>&1)"
-case "$warn_out" in *"WARNING: exported in your shell: ANTHROPIC_API_KEY ANTHROPIC_BASE_URL — ignored for this run."*) ok ;; *) bad "$warn_out" ;; esac
+case "$warn_out" in *WARNING*|*"exported in your shell"*) bad "$warn_out" ;; *) ok ;; esac
 
-# Warning alone came too late: run.sh / switch-llm.sh start the agent right after, so the exported
-# key has to be dropped from the calling script's env for their own compose calls to be right.
+# The unset itself is load-bearing and must survive the warning's removal: run.sh / switch-llm.sh
+# start the agent right after, so the exported key has to be dropped from the calling script's env
+# for their own compose calls to be right.
 t "unsets the exported vars in-process so the script's compose calls don't see them"
 reset_env; F_SUBSCRIPTION_TOKEN="sk-ant-oat01-abc"
 left="$(export ANTHROPIC_API_KEY=sk-ant-api03-shell ANTHROPIC_BASE_URL=https://x.example
@@ -115,6 +118,46 @@ case "$warn_out" in *WARNING*) bad "$warn_out" ;; *) ok ;; esac
 
 t "SUBSCRIPTION_KEYS lists every key the arm writes (for --reset)"
 if printf '%s\n' "${SUBSCRIPTION_KEYS[@]}" | grep -qx CLAUDE_CODE_OAUTH_TOKEN; then ok; else bad "${SUBSCRIPTION_KEYS[*]:-unset}"; fi
+
+# This path talks to the first-party API with bare model ids, exactly like the `anthropic` arm —
+# so the picker should offer the same extras. (The gateway arm blanks them for a different reason:
+# a gateway names models its own way, and we only know the one id the user gave us.)
+t "registers claude-opus-5 as an extra so the picker offers it"
+reset_env; F_SUBSCRIPTION_TOKEN="sk-ant-oat01-abc"
+provider_subscription_configure >/dev/null 2>&1
+if [ "$(getenv CLAUDE_EXTRA_MODELS)" = "claude-opus-5" ]; then ok; else bad "$(getenv CLAUDE_EXTRA_MODELS)"; fi
+
+# A Bedrock/gateway id left in the extras is rejected by the first-party API just as CLAUDE_MODEL
+# would be, so the list is always rewritten rather than carried over.
+t "overwrites leftover provider-specific extras from a previous provider"
+reset_env; setenv CLAUDE_EXTRA_MODELS "us.anthropic.claude-opus-5"; F_SUBSCRIPTION_TOKEN="sk-ant-oat01-abc"
+provider_subscription_configure >/dev/null 2>&1
+if [ "$(getenv CLAUDE_EXTRA_MODELS)" = "claude-opus-5" ]; then ok; else bad "$(getenv CLAUDE_EXTRA_MODELS)"; fi
+
+# The title LLM being Bedrock-only is a detail of an unrelated subsystem; it told the user nothing
+# actionable on a path they'd just chosen deliberately.
+t "does not print the Bedrock-only ticket-titles note"
+reset_env; F_SUBSCRIPTION_TOKEN="sk-ant-oat01-abc"
+title_out="$(provider_subscription_configure 2>&1)"
+case "$title_out" in *"ticket titles are not generated"*) bad "note still printed" ;; *) ok ;; esac
+
+# Normalization, not validation: no valid opaque bearer token contains whitespace, so trimming can
+# never turn a good token away regardless of future token shape. Deliberately NOT a length or
+# stricter format check — the prefix is not a documented contract (see the file header).
+t "trims surrounding whitespace from a pasted token"
+reset_env; F_SUBSCRIPTION_TOKEN="  sk-ant-oat01-abc
+"
+provider_subscription_configure >/dev/null 2>&1
+if [ "$(getenv CLAUDE_CODE_OAUTH_TOKEN)" = "sk-ant-oat01-abc" ]; then ok; else bad "[$(getenv CLAUDE_CODE_OAUTH_TOKEN)]"; fi
+
+t "trims a token that came from .env with trailing whitespace"
+reset_env; setenv CLAUDE_CODE_OAUTH_TOKEN "sk-ant-oat01-saved   "
+provider_subscription_configure >/dev/null 2>&1
+if [ "$(getenv CLAUDE_CODE_OAUTH_TOKEN)" = "sk-ant-oat01-saved" ]; then ok; else bad "[$(getenv CLAUDE_CODE_OAUTH_TOKEN)]"; fi
+
+t "a whitespace-only token is treated as no token at all"
+reset_env; F_SUBSCRIPTION_TOKEN="   "
+if provider_subscription_configure >/dev/null 2>&1; then bad "returned 0 for a blank token"; else ok; fi
 
 echo; echo "$PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]
