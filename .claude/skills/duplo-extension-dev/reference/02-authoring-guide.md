@@ -80,10 +80,11 @@ Ties the bundle together. For a typed extension (see the hello-world manifest):
 }
 ```
 Critical: `archetype` must be `"typed"` so the loader takes the DLL path; the five `*Type` names must be the
-fully-qualified type names in your DLL; `backend.assemblyDir` is `<id>/<version>/backend`. **Bump `version` on
-every backend code change** ([06](06-registration.md#reloading-changed-code--bump-manifestversion)) — you don't
-have to bump `assemblyDir` with it, since `build-extension.sh` derives that from `id` and `version` when it
-writes the bundle manifest. It prints a `NOTE:` if the checked-in value disagreed.
+fully-qualified type names in your DLL; `backend.assemblyDir` is `<id>/<version>/backend` and each
+`skills[].folder` is `<id>/<version>/skills/<name>`. **Bump `version` on every backend code change**
+([06](06-registration.md#reloading-changed-code--bump-manifestversion)) — you don't have to bump either path
+with it, since `build-extension.sh` derives both from `id` and `version` when it writes the bundle manifest.
+It prints a `NOTE:` if a checked-in value disagreed.
 
 ### Naming
 
