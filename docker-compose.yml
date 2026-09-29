@@ -141,7 +141,7 @@ services:
     image: quay.io/duplocloud/duplo-ai-helpdesk-ui:${UI_TAG}
     restart: unless-stopped
     ports:
-      - "${UI_PORT:-4200}:80"
+      - "${UI_PORT:-4200}:8080"
     volumes:
       # Published image serves the SPA only; this conf proxies API prefixes to the studio (same-origin, no CORS).
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
