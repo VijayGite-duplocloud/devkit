@@ -170,7 +170,9 @@ services:
   # below). Both routes are live; the compose network is simply the preferred one.
   builder:
     profiles: [tools]
-    image: ${BUILDER_IMAGE:-quay.io/duplocloud/duplo-extension-builder:${BUILDER_TAG:-latest}}
+    # scripts/_builder.sh resolves BUILDER_TAG and exports BUILDER_IMAGE before every build. This default is only
+    # for a hand-run `docker compose run builder`, and must match _BUILDER_PINNED_IMAGE there.
+    image: ${BUILDER_IMAGE:-quay.io/duplocloud/duplo-extension-builder@sha256:8185e6a74379ae99e145f55608b3bc17e3037e95e64a612a226fe0eb15c0dbcd}
     # Unset by default, so the build runs on the host's native architecture. Set BUILDER_PLATFORM only
     # to force one (e.g. linux/amd64 if a publish ever ends up amd64-only) — an unset value is dropped
     # by compose, whereas copying duplo-ai-studio's linux/amd64 default would silently emulate a .NET
