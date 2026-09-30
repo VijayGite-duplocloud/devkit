@@ -224,7 +224,7 @@ license_warn_expiry() {
 #   ISSUED<TAB><message><TAB><recover-path>  one trial per email — already used. <recover-path> is set when
 #                                   the server says that trial is recoverable; recover it rather than asking
 #                                   the user for a JWT they may never have been sent.
-#   EMAIL<TAB><message>             email rejected (personal domain, malformed, …)
+#   EMAIL<TAB><message>             email rejected (privacy-relay or disposable domain, malformed, …)
 #   ERR<TAB><message>               anything else, including transport failure
 license_request() { # email api-url
   E="$1" U="$2" python3 - <<'PY'
@@ -790,12 +790,12 @@ if [ -z "$LIC" ]; then
         break ;;
       EMAIL)
         echo "  ✖ $MSG" >&2
-        [ "$NONINTERACTIVE" = 1 ] && { echo "    Re-run with --email <work address> — personal domains are not accepted." >&2; exit 1; }
-        [ "$TRIES" -ge 3 ] && { echo "Giving up after $TRIES attempts — re-run with --email <work address>." >&2; exit 1; }
-        read -r -p 'Work email: ' EMAIL || { echo "No work email provided — re-run with --email <addr>." >&2; exit 1; }
+        [ "$NONINTERACTIVE" = 1 ] && { echo "    Re-run with --email <addr> — most work and personal addresses are accepted; privacy-relay and disposable domains are not." >&2; exit 1; }
+        [ "$TRIES" -ge 3 ] && { echo "Giving up after $TRIES attempts — re-run with --email <addr>." >&2; exit 1; }
+        read -r -p 'Email address: ' EMAIL || { echo "No email provided — re-run with --email <addr>." >&2; exit 1; }
         while ! email_valid "$EMAIL"; do
           echo "Invalid email address: '${EMAIL:-<empty>}' (expected name@example.com)." >&2
-          read -r -p 'Work email: ' EMAIL || { echo "No work email provided — re-run with --email <addr>." >&2; exit 1; }
+          read -r -p 'Email address: ' EMAIL || { echo "No email provided — re-run with --email <addr>." >&2; exit 1; }
         done ;;
       ISSUED)
         # The address already has a trial. When the server can recover it this is not an error the user has

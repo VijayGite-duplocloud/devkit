@@ -72,8 +72,9 @@ verification link, and the run waits for you to click it before carrying on. So:
 
 - **Use an address you can read right now.** The install blocks until that email arrives and you click
   the link.
-- **Use a work address.** Personal domains are not accepted — you get
-  `Re-run with --email <work address> — personal domains are not accepted.` and a chance to retype.
+- **Work or personal is fine.** Privacy-relay and disposable domains are not accepted — you get
+  `Re-run with --email <addr> — most work and personal addresses are accepted; privacy-relay and disposable
+  domains are not.` and a chance to retype.
 
 The same address becomes your portal login on the next page.
 

@@ -159,8 +159,9 @@ If you already hold the JWT, skip the round trip entirely with `./run.sh --licen
 
 ### The license server rejected my email
 
-Personal domains are not accepted. Re-run with a work address — `./run.sh --email you@yourcompany.com`.
-A rejected address is not spent, so this is safe to correct.
+Work and personal addresses are both accepted; privacy-relay and disposable domains are not. Re-run with a
+different address — `./run.sh --email you@example.com`. A rejected address is not spent, so this is safe to
+correct.
 
 ### The license is for the wrong address
 
