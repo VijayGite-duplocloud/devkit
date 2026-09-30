@@ -34,7 +34,8 @@ run: it requests a **trial license** for your admin email (the company is derive
 DuploCloud emails that address a verification link, and the run waits up to 2 minutes for you to click it
 before picking the license up and writing it to `Licensing__Token`.
 
-Use a **work address** — the license server rejects personal domains — and note that it issues exactly
+Use an address you can receive mail at — work or personal is fine, but the license server rejects
+privacy-relay and disposable domains — and note that it issues exactly
 **one license per email address**. There is no second trial for the same address, so `run.sh` is built to
 never need one: a license it already has is reused, an interrupted verification resumes, and an address the
 server already knows is **recovered** (the server emails a confirmation link that releases the same license

@@ -28,8 +28,8 @@ git clone https://github.com/duplocloud/devkit my-agent && cd my-agent
 ./run.sh
 ```
 
-First run asks for an admin **email** — use your **work address**, personal domains (gmail.com, …) are not
-accepted — and DuploCloud emails you a **verification link**. Click it and the run continues on its own, then
+First run asks for an admin **email** — a work or personal address you can read right now (privacy-relay
+and disposable domains are not accepted) — and DuploCloud emails you a **verification link**. Click it and the run continues on its own, then
 asks for a **password** and an **LLM provider** and brings the stack up, registering your chosen provider's
 model as the **System default LLM**. Sign in at
 **<http://localhost:4210>**.
