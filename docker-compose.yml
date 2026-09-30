@@ -137,16 +137,50 @@ services:
       init-perms:
         condition: service_completed_successfully
 
+  # Renders nginx/default.conf into a volume with the DNS resolver this runtime actually uses.
+  #
+  # It cannot be done in the UI image: that image's entrypoint is `nginx` directly — no
+  # /docker-entrypoint.d/, no /etc/nginx/templates, and it runs as nonroot 65532 — so the usual
+  # envsubst-on-a-template trick is unavailable. nginx itself has never read /etc/resolv.conf for its
+  # `resolver` directive, so the address has to be substituted before nginx starts.
+  #
+  # Asking the network rather than branching on the runtime: any container on this network is handed
+  # the correct nameserver by the runtime itself, so busybox reads its own /etc/resolv.conf and there
+  # is no docker-vs-podman case to keep in sync (verified: 127.0.0.11 on docker, the network gateway
+  # on podman).
+  #
+  # $$ not $: compose interpolates $VAR in `command:` before the shell sees it, and an interpolated-away
+  # variable yields an empty resolver and an nginx that will not load its config at all.
+  init-nginx-conf:
+    image: busybox:1.36
+    command:
+      - sh
+      - -c
+      - |
+        R="$$(awk '/^nameserver/{print $$2; exit}' /etc/resolv.conf)"
+        [ -n "$$R" ] || { echo "no nameserver in /etc/resolv.conf" >&2; exit 1; }
+        sed "s|__RESOLVER__|$$R|" /tpl/default.conf > /out/default.conf
+        chmod 0644 /out/default.conf
+        echo "nginx resolver = $$R"
+    volumes:
+      - ./nginx/default.conf:/tpl/default.conf:ro
+      - nginx_conf:/out
+
   duplo-ui:
     image: quay.io/duplocloud/duplo-ai-helpdesk-ui:${UI_TAG}
     restart: unless-stopped
     ports:
       - "${UI_PORT:-4200}:8080"
     volumes:
-      # Published image serves the SPA only; this conf proxies API prefixes to the studio (same-origin, no CORS).
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      # Published image serves the SPA only; the rendered conf proxies API prefixes to the studio
+      # (same-origin, no CORS). The whole directory is replaced: the image ships only default.conf in
+      # there, and tests/test-ui-nginx.sh guards that assumption.
+      - nginx_conf:/etc/nginx/conf.d:ro
     depends_on:
-      - duplo-ai-studio
+      duplo-ai-studio:
+        condition: service_started
+      init-nginx-conf:
+        condition: service_completed_successfully
 
   xterm:
     image: quay.io/duplocloud/duplo-xterm:${XTERM_TAG:-main-d323e0b}
@@ -209,6 +243,7 @@ services:
       - DUPLO_ADMIN_TOKEN=${DUPLO_ADMIN_TOKEN:-}
 
 volumes:
+  nginx_conf:
   mongo_data:
   platform_data:
   extension_studio_data:
