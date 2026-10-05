@@ -209,6 +209,12 @@ setenv() {
   python3 - "$ENV" "$1" "${2-}" <<'PY'
 import sys
 p,k,v=sys.argv[1],sys.argv[2],sys.argv[3]
+# Strip CR/LF from the value before it ever reaches .env. A bare \r (e.g. from a CRLF-wrapped
+# `openssl` build on Windows) renders as a wrapped line and can fail downstream validation; a bare
+# \n would be worse — it writes a second, bare line with no '=' and breaks compose's env_file
+# parsing for the whole stack. Every value stored here (tokens, keys, passwords, ids) is expected
+# to be single-line, so this is a safe no-op on any value that was already clean.
+v=v.replace("\r","").replace("\n","")
 lines=open(p).read().splitlines()
 out=[];found=False
 for ln in lines:
@@ -697,6 +703,31 @@ if [ "$RESET_LICENSE" = 1 ]; then
   echo "    cleared the license."
 fi
 
+# `read` with no `-e` has no line editor to intercept special keys, so a terminal that sends an escape
+# sequence during the prompt — an arrow key, a focus-in/out report, a bracketed-paste marker, a cursor
+# position reply — lands as literal bytes in the captured string instead of being consumed. Observed
+# concretely: an Up/Down arrow at the email prompt in a Windows Git-Bash/ConPTY session stored
+# `<ESC>[A<ESC>[B` ahead of the typed address, which then silently mismatched every login attempt.
+#
+# The two shapes a terminal actually emits for this (ECMA-48 §5.4):
+#   CSI   ESC '[' parameter-bytes(0-9:;<=>?) intermediate-bytes(0x20-0x2F) final-byte(0x40-0x7E)
+#         e.g. ESC[A (Up), ESC[1;5C (Ctrl+Right), ESC[200~/ESC[201~ (bracketed paste), ESC[?25h (DEC
+#         private mode) — the full parameter/intermediate byte ranges matter: matching only digits and
+#         ';' (as an earlier version of this function did) leaves ':'/'<'/'='/'>' sequences half-eaten,
+#         stripping the ESC but not the rest, which corrupts the value in a different way.
+#   SS3   ESC 'O' letter — the form some terminals use for arrow/function keys in "application keypad"
+#         mode instead of CSI.
+# A sequence this doesn't recognize, or a lone ESC with no sequence at all, still loses its ESC (and any
+# other C0/DEL byte) to the catch-all `[:cntrl:]` pass below — POSIX's standard control-character class,
+# portable across GNU/BSD/MSYS tr without relying on octal-range or \x escape syntax that differs between
+# them. None of this can ever remove intentionally-typed content: ESC/C0/DEL are not characters a person
+# can put in an email, password or API key by typing — confirmed against UTF-8, and against values
+# containing literal '[', '\', '$', '#' unrelated to any escape sequence.
+strip_term_noise() { # value
+  local s="$1" esc=$'\033'
+  s="$(printf '%s' "$s" | sed -E "s/${esc}(\[[0-9:;<=>?]*[ -/]*[@-~]|O[A-Za-z])//g")"
+  printf '%s' "$s" | tr -d '[:cntrl:]'
+}
 # ── resolve a value: flag > .env > prompt ─────────────────────────────────────
 resolve() { # flagval envkey prompt [secret]
   local cur="$1" envkey="$2" prompt="$3" secret="${4-}"
@@ -704,6 +735,7 @@ resolve() { # flagval envkey prompt [secret]
   if [ -z "$cur" ]; then
     [ "$NONINTERACTIVE" = 1 ] && { echo "Missing $envkey — pass its flag (non-interactive)." >&2; exit 1; }
     if [ "$secret" = secret ]; then read -rs -p "$prompt: " cur; echo >&2; else read -r -p "$prompt: " cur; fi
+    cur="$(strip_term_noise "$cur")"
   fi
   printf '%s' "$cur"
 }
@@ -730,6 +762,7 @@ while ! email_valid "$EMAIL"; do
   echo "Invalid email address: '${EMAIL:-<empty>}' (expected name@example.com)." >&2
   { [ "$NONINTERACTIVE" = 1 ] || [ -n "$F_EMAIL" ]; } && exit 1
   read -r -p 'Admin email: ' EMAIL
+  EMAIL="$(strip_term_noise "$EMAIL")"
 done
 
 # ── license (BEGIN LICENSE BLOCK) ────────────────────────────────────────────
@@ -975,7 +1008,10 @@ setenv DEVKIT_MODEL "$MODEL"
 setenv AIStudio__IsMasterDisabled true
 [ -n "$(getenv Authentication__FrontendBaseUrl)" ] || setenv Authentication__FrontendBaseUrl "http://localhost:$(getenv UI_PORT 2>/dev/null || echo 4200)"
 # Stable secrets: generate once; --reset already blanked them so they regenerate on a fresh DB.
-[ -n "$(getenv Encryption__MasterKey)" ] || setenv Encryption__MasterKey "$(openssl rand -base64 96 | tr -d '\n')"
+# -d '\r\n', not just '\n': the MSYS2/mingw64 openssl that ships with Git for Windows wraps base64
+# output at 64 chars using CRLF line endings, not bare LF. Stripping only '\n' left a stray '\r'
+# embedded mid-key, which rendered as a wrapped line in .env and failed the backend's key validation.
+[ -n "$(getenv Encryption__MasterKey)" ] || setenv Encryption__MasterKey "$(openssl rand -base64 96 | tr -d '\r\n')"
 [ -n "$(getenv Authentication__JwtSharedSecret)" ] || setenv Authentication__JwtSharedSecret "$(openssl rand -hex 32)"
 
 if [ "$MODEL" = anthropic ]; then
