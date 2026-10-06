@@ -1,17 +1,33 @@
 #!/usr/bin/env bash
-# Checks strip_term_noise() in run.sh: the sanitizer that removes terminal escape sequences and other
-# control bytes from values read interactively (email, password, API keys) via `resolve()`.
+# Checks strip_term_noise() and prompt() in run.sh: the sanitizer that removes terminal escape
+# sequences and other control bytes from values read interactively, and the single helper every
+# interactive prompt (email, password, API keys, the LLM-provider menu) is required to go through.
 #
 # Why this exists: `read` with no `-e` has no line editor to intercept special keys, so a terminal that
 # sends an escape sequence during a prompt — an arrow key, a focus report, a bracketed-paste marker, a
 # cursor-position reply — lands as literal bytes in the captured string. Concretely observed: an Up/Down
 # arrow at the email prompt in a Windows Git-Bash session stored `<ESC>[A<ESC>[B` ahead of the typed
 # address, so Authentication__LocalAdminEmail/SuperUsers never matched what the user actually typed and
-# login silently failed. This extracts the function straight from run.sh (not a copy) so it can never
-# drift out of sync with the shipped code, then checks it against the real escape-sequence grammar
-# (ECMA-48 CSI and SS3 forms) plus negative cases that must survive byte-for-byte.
+# login silently failed. A review on the PR that introduced strip_term_noise then found the same gap
+# still open on two other prompts (a license-rejected-email retry, and the LLM-provider menu) that read
+# directly with `read -r` instead of going through it — hence prompt(): one helper, used everywhere, so
+# a future prompt can't be added without sanitization the same way. It also switches to `read -e`
+# (readline), which consumes an arrow key/paste/focus sequence as editing input in the first place —
+# strip_term_noise stays behind it as a second line of defense for whatever readline doesn't bind.
 #
-# Static + pure-function only: nothing here starts the stack or needs any runtime installed.
+# This extracts both functions straight from run.sh (not a copy) so they can never drift out of sync
+# with the shipped code, then checks strip_term_noise against the real escape-sequence grammar (ECMA-48
+# CSI and SS3 forms) plus negative cases that must survive byte-for-byte, and checks prompt() for
+# correct sanitization, secret-vs-plain handling, and correct EOF/exit-status propagation in both
+# branches — a literal first draft of prompt() sequenced `read -res ...; echo >&2` in the secret branch,
+# which left the branch's own exit status as echo's (always 0), silently swallowing a real EOF on the
+# password prompt specifically; prompt() captures `read`'s status into a local before the echo runs.
+#
+# Static + pure-function only: nothing here starts the stack or needs any runtime installed. The
+# interactive-read checks pipe input instead of driving a real pty, so they prove sanitization/exit-code
+# correctness, not that readline itself consumes a raw escape sequence — that part is standard,
+# well-established GNU Readline behavior (the same arrow-key bindings every interactive bash session
+# already relies on), not new logic this repo introduces.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 PASS=0; FAIL=0
@@ -19,8 +35,15 @@ t()   { printf '  %s … ' "$1"; }
 ok()  { echo "ok"; PASS=$((PASS+1)); }
 bad() { echo "FAIL: $1"; FAIL=$((FAIL+1)); }
 
-t "run.sh is syntactically valid and defines strip_term_noise"
-if bash -n run.sh 2>/dev/null && grep -q '^strip_term_noise() {' run.sh; then ok; else bad "missing/syntax error"; exit 1; fi
+t "run.sh is syntactically valid and defines strip_term_noise and prompt"
+if bash -n run.sh 2>/dev/null && grep -q '^strip_term_noise() {' run.sh && grep -q '^prompt() {' run.sh; then ok
+else bad "missing/syntax error"; exit 1; fi
+
+t "every interactive read in run.sh goes through prompt() (none bypass sanitization)"
+# prompt()'s own body is the one place real `read -p` calls are allowed to live; strip its lines out
+# (not just its declaration line) before checking for a stray one anywhere else in the file.
+outside="$(awk '/^prompt\(\) \{/{skip=1} skip{if(/^}/)skip=0; next} {print}' run.sh | grep -nE "read -r?e?s? -p" || true)"
+if [ -z "$outside" ]; then ok; else bad "a raw 'read ... -p' exists outside prompt(): $outside"; fi
 
 # Pull the function verbatim out of run.sh — this is what actually ships, not a reimplementation.
 eval "$(awk '/^strip_term_noise\(\) \{/,/^}/' run.sh)"
@@ -91,6 +114,34 @@ t "idempotent: cleaning already-clean output changes nothing further"
 once="$(strip_term_noise "${E}[A${E}[Badmin.user@example.com")"
 twice="$(strip_term_noise "$once")"
 if [ "$once" = "$twice" ]; then ok; else bad "once=$(printf '%q' "$once") twice=$(printf '%q' "$twice")"; fi
+
+# Pull prompt() out the same way. These pipe input rather than driving a real pty, so they check
+# sanitization, secret-vs-plain handling, and exit-status correctness — not that readline itself
+# intercepts a raw escape sequence (standard GNU Readline behavior, not new logic here).
+eval "$(awk '/^prompt\(\) \{/,/^}/' run.sh)"
+
+echo "prompt() — captures a clean value and reports success:"
+t "non-secret: plain piped input"
+EMAIL=""; rc=0
+EMAIL="$(printf 'admin.user@example.com\n' | (eval "$(awk '/^strip_term_noise\(\) \{/,/^}/' run.sh; awk '/^prompt\(\) \{/,/^}/' run.sh)"; prompt EMAIL "Admin email" >/dev/null; printf '%s' "$EMAIL"))"
+if [ "$EMAIL" = "admin.user@example.com" ]; then ok; else bad "got $(printf '%q' "$EMAIL")"; fi
+
+t "secret: plain piped input"
+PW="$(printf 'Vijay123#\n' | (eval "$(awk '/^strip_term_noise\(\) \{/,/^}/' run.sh; awk '/^prompt\(\) \{/,/^}/' run.sh)"; prompt PW "Admin password" secret 2>/dev/null >/dev/null; printf '%s' "$PW"))"
+if [ "$PW" = "Vijay123#" ]; then ok; else bad "got $(printf '%q' "$PW")"; fi
+
+t "non-secret: escape-sequence-contaminated piped input still comes out clean"
+EMAIL="$(printf '\033[A\033[Badmin.user@example.com\n' | (eval "$(awk '/^strip_term_noise\(\) \{/,/^}/' run.sh; awk '/^prompt\(\) \{/,/^}/' run.sh)"; prompt EMAIL "Admin email" >/dev/null; printf '%s' "$EMAIL"))"
+if [ "$EMAIL" = "admin.user@example.com" ]; then ok; else bad "got $(printf '%q' "$EMAIL")"; fi
+
+echo "prompt() — EOF is reported, in both branches (the bug a literal first draft had):"
+t "non-secret: EOF yields rc=1"
+rc="$( (eval "$(awk '/^strip_term_noise\(\) \{/,/^}/' run.sh; awk '/^prompt\(\) \{/,/^}/' run.sh)"; prompt V "x" < /dev/null >/dev/null 2>&1; echo $?) )"
+if [ "$rc" = 1 ]; then ok; else bad "rc=$rc (expected 1)"; fi
+
+t "secret: EOF yields rc=1, not masked by the trailing 'echo >&2'"
+rc="$( (eval "$(awk '/^strip_term_noise\(\) \{/,/^}/' run.sh; awk '/^prompt\(\) \{/,/^}/' run.sh)"; prompt V "x" secret < /dev/null >/dev/null 2>&1; echo $?) )"
+if [ "$rc" = 1 ]; then ok; else bad "rc=$rc (expected 1) — the echo-after-read sequencing bug is back"; fi
 
 echo; echo "$PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]

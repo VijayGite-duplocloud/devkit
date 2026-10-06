@@ -728,14 +728,28 @@ strip_term_noise() { # value
   s="$(printf '%s' "$s" | sed -E "s/${esc}(\[[0-9:;<=>?]*[ -/]*[@-~]|O[A-Za-z])//g")"
   printf '%s' "$s" | tr -d '[:cntrl:]'
 }
+# Every interactive prompt in this script goes through here — a value typed at ANY other `read` site
+# would bypass strip_term_noise entirely, which is exactly how the email and LLM-provider prompts
+# originally missed it (a review caught both). `-e` (readline) is the first line of defense: it
+# interprets an arrow key, Home/End, or a bracketed-paste sequence as editing input instead of
+# inserting the raw bytes, so in the common case nothing reaches strip_term_noise to clean up at all.
+# It's kept behind it anyway as a second line of defense for whatever readline doesn't bind for a
+# given $TERM/terminfo, or a sequence sent outside of readline's own escape-key window.
+prompt() { # var label [secret]
+  local __v __rc=0
+  if [ "${3-}" = secret ]; then read -res -p "$2: " __v || __rc=$?; echo >&2
+  else read -re -p "$2: " __v || __rc=$?
+  fi
+  printf -v "$1" '%s' "$(strip_term_noise "$__v")"
+  return "$__rc"
+}
 # ── resolve a value: flag > .env > prompt ─────────────────────────────────────
-resolve() { # flagval envkey prompt [secret]
-  local cur="$1" envkey="$2" prompt="$3" secret="${4-}"
+resolve() { # flagval envkey label [secret]
+  local cur="$1" envkey="$2" label="$3" secret="${4-}"
   [ -z "$cur" ] && cur="$(getenv "$envkey")"
   if [ -z "$cur" ]; then
     [ "$NONINTERACTIVE" = 1 ] && { echo "Missing $envkey — pass its flag (non-interactive)." >&2; exit 1; }
-    if [ "$secret" = secret ]; then read -rs -p "$prompt: " cur; echo >&2; else read -r -p "$prompt: " cur; fi
-    cur="$(strip_term_noise "$cur")"
+    prompt cur "$label" "$secret"
   fi
   printf '%s' "$cur"
 }
@@ -761,8 +775,7 @@ EMAIL="$(resolve "$F_EMAIL" Authentication__LocalAdminEmail 'Admin email')"
 while ! email_valid "$EMAIL"; do
   echo "Invalid email address: '${EMAIL:-<empty>}' (expected name@example.com)." >&2
   { [ "$NONINTERACTIVE" = 1 ] || [ -n "$F_EMAIL" ]; } && exit 1
-  read -r -p 'Admin email: ' EMAIL
-  EMAIL="$(strip_term_noise "$EMAIL")"
+  prompt EMAIL 'Admin email'
 done
 
 # ── license (BEGIN LICENSE BLOCK) ────────────────────────────────────────────
@@ -893,10 +906,10 @@ if [ -z "$LIC" ]; then
         echo "  ✖ $MSG" >&2
         [ "$NONINTERACTIVE" = 1 ] && { echo "    Re-run with --email <addr> — most work and personal addresses are accepted; privacy-relay and disposable domains are not." >&2; exit 1; }
         [ "$TRIES" -ge 3 ] && { echo "Giving up after $TRIES attempts — re-run with --email <addr>." >&2; exit 1; }
-        read -r -p 'Email address: ' EMAIL || { echo "No email provided — re-run with --email <addr>." >&2; exit 1; }
+        prompt EMAIL 'Email address' || { echo "No email provided — re-run with --email <addr>." >&2; exit 1; }
         while ! email_valid "$EMAIL"; do
           echo "Invalid email address: '${EMAIL:-<empty>}' (expected name@example.com)." >&2
-          read -r -p 'Email address: ' EMAIL || { echo "No email provided — re-run with --email <addr>." >&2; exit 1; }
+          prompt EMAIL 'Email address' || { echo "No email provided — re-run with --email <addr>." >&2; exit 1; }
         done ;;
       ISSUED)
         # The address already has a trial. When the server can recover it this is not an error the user has
@@ -983,7 +996,7 @@ if [ -z "$MODEL" ]; then
     esac
     printf 'Select LLM provider:\n  1) anthropic (API key)\n  2) bedrock (AWS keys)\n  3) LLM gateway (OpenRouter, Bifrost, LiteLLM, … — any Anthropic-compatible endpoint)\n  4) bedrock via this EC2 instance role — %s @ %s, no keys%s\n  5) Claude Code subscription (your own, via `claude setup-token`)\n' \
       "$AWS_ROLE" "$BEDROCK_REGION" "$IMDS_CAVEAT" >&2
-    read -r -p 'Enter 1, 2, 3, 4 or 5: ' MODEL
+    prompt MODEL 'Enter 1, 2, 3, 4 or 5'
   else
     if [ "$BEDROCK_AVAILABLE" = 1 ]; then
       # Host reached IMDS but a container couldn't — almost always the IMDSv2 PUT-response hop limit
@@ -994,7 +1007,7 @@ if [ -z "$MODEL" ]; then
       echo "    ✗ no usable instance-role Bedrock access${BEDROCK_REASON:+ ($BEDROCK_REASON)}." >&2
     fi
     printf 'Select LLM provider:\n  1) anthropic (API key)\n  2) bedrock (AWS keys)\n  3) LLM gateway (OpenRouter, Bifrost, LiteLLM, … — any Anthropic-compatible endpoint)\n  5) Claude Code subscription (your own, via `claude setup-token`)\n' >&2
-    read -r -p 'Enter 1, 2, 3 or 5: ' MODEL
+    prompt MODEL 'Enter 1, 2, 3 or 5'
   fi
 fi
 MODEL="$(printf '%s' "$MODEL" | tr '[:upper:]' '[:lower:]')"
