@@ -66,8 +66,20 @@ case "$method $url" in
     [ -n "${RACE:-}" ] && [ ! -f "$CONSOLE/raced" ] && { touch "$CONSOLE/raced"; echo '[{"uuid":"v-1"}]' > "$CONSOLE/versions.json"; echo '{"version":["1.0.0 already exists for this extension."]}'; exit 22; }
     [ -n "${VERSION_VANISHES:-}" ] && { echo '{"uuid":"v-1"}'; exit 0; }
     echo '[{"uuid":"v-1"}]' > "$CONSOLE/versions.json"; echo '{"uuid":"v-1"}' ;;
-  "GET "*"/artifacts/?sdk_version="*) cat "$CONSOLE/artifacts.json" 2>/dev/null || echo '[]' ;;
-  "POST "*"/artifacts/") echo "[$data]" > "$CONSOLE/artifacts.json"; echo "$data" ;;
+  "GET "*"/versions/v-1/")
+    if [ -f "$CONSOLE/published" ]; then echo '{"uuid":"v-1","is_published":true}'; else echo '{"uuid":"v-1","is_published":false}'; fi ;;
+  "PATCH "*"/versions/v-1/")
+    # PATCH_FAIL refuses the publish alone, so the version GET before it still answers.
+    [ -n "${PATCH_FAIL:-}" ] && { echo '{"detail":"refused"}'; exit 22; }
+    echo "$data" > "$CONSOLE/published"; echo '{"uuid":"v-1","is_published":true}' ;;
+  # Artifacts for every SDK sit in one list, filtered by sdk_version when the URL names one, so a version can hold
+  # builds for several SDKs.
+  "GET "*"/artifacts/?sdk_version="*)
+    jq -c --arg s "${url##*sdk_version=}" '[.[] | select(.sdk_version == $s)]' "$CONSOLE/artifacts.json" 2>/dev/null || echo '[]' ;;
+  "GET "*"/artifacts/") cat "$CONSOLE/artifacts.json" 2>/dev/null || echo '[]' ;;
+  "POST "*"/artifacts/")
+    jq -c --argjson a "$data" '. + [$a]' "$CONSOLE/artifacts.json" 2>/dev/null > "$CONSOLE/a.tmp" || echo "[$data]" > "$CONSOLE/a.tmp"
+    mv "$CONSOLE/a.tmp" "$CONSOLE/artifacts.json"; echo "$data" ;;
 esac
 EOF
 
