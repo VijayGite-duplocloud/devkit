@@ -35,7 +35,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: Publish each version this run registers. Allowlist entries with "publish" true publish regardless.
+        description: Publish each allowlisted extension's current version, including one an earlier run registered or a platform owner unpublished. Allowlist entries with "publish" true publish new builds regardless.
         type: boolean
         default: false
 

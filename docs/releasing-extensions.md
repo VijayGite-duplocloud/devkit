@@ -143,7 +143,7 @@ default to the production bucket and the production console.
 A build that is already finished stops before any download of the zip or any S3 call. The script reads the
 Release's digest for `extension.zip`, downloads only `extension.zip.sig`, and looks up the version and its
 artifact for this SDK in the license server. An artifact whose path, hash and signature match is reported
-as already published. Registration only ever follows both uploads, so a matching artifact means both objects
+as already uploaded and registered. Registration only ever follows both uploads, so a matching artifact means both objects
 are already in the bucket. A failed lookup fails the job. Anything else takes the full path below.
 
 Otherwise, before uploading, the script downloads both assets from the GitHub Release itself, never
@@ -167,8 +167,9 @@ counts as already done. One that differs fails the job. Every version it creates
 Publishing a version is what ships its build to every entitled install, so it is opt-in, in either of two ways.
 
 - **Per extension.** Set `"publish": true` on the extension's allowlist entry. A push to `main` then publishes a
-  version when that run newly registers its build. A push that resumes a release an earlier run registered never
-  publishes, so a version a platform owner unpublished stays unpublished.
+  version when that run registers its first build. A push that resumes a release an earlier run registered, or
+  adds another SDK's build to a version that already has one, never publishes, so a version a platform owner
+  unpublished stays unpublished.
 - **Per run.** Start the Extension Release workflow by hand with its `publish` input checked. That run
   publishes every version it registers, and also a version an earlier run registered, since a person chose that
   run. It is also how to publish a version whose publish failed after registration.

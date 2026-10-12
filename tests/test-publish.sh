@@ -106,8 +106,18 @@ OUT=$(publish_version=any publish_build demo-v1.0.0-sdk-1.0.6 duplo.demo 1.0.0 1
 [ $RC = 0 ] && [ "$(grep -c "X PATCH" "$LOG")" = 1 ] && ! grep -q "^aws " "$LOG" && ok || bad "rc=$RC out=$OUT"
 
 t "a failed publish fails the job"
+fresh; OUT=$(PATCH_FAIL=1 publish_version=new publish_build demo-v1.0.0-sdk-1.0.6 duplo.demo 1.0.0 1.0.6 extensions/demo 2>&1); RC=$?
+[ $RC != 0 ] && grep -q "::error::.*refused to publish" <<<"$OUT" && grep -q "publish input" <<<"$OUT" && ok || bad "rc=$RC out=$OUT"
+
+t "a failed lookup before publishing fails the job and names the manual retry"
 fresh; OUT=$(CONSOLE_FAIL='/versions/v-1/$' publish_version=new publish_build demo-v1.0.0-sdk-1.0.6 duplo.demo 1.0.0 1.0.6 extensions/demo 2>&1); RC=$?
-[ $RC != 0 ] && grep -q "::error::.*publish" <<<"$OUT" && ok || bad "rc=$RC out=$OUT"
+[ $RC != 0 ] && grep -q "::error::.*lookup of the version to publish failed" <<<"$OUT" && grep -q "publish input" <<<"$OUT" && ok || bad "rc=$RC out=$OUT"
+
+t "a new SDK's build of an unpublished version does not publish it"
+fresh; publish_version=new publish_build demo-v1.0.0-sdk-1.0.6 duplo.demo 1.0.0 1.0.6 extensions/demo >/dev/null 2>&1
+rm -f "$CONSOLE/published"; : > "$LOG"
+OUT=$(publish_version=new publish_build demo-v1.0.0-sdk-1.0.7 duplo.demo 1.0.0 1.0.7 extensions/demo 2>&1); RC=$?
+[ $RC = 0 ] && [ "$(jq length "$CONSOLE/artifacts.json")" = 2 ] && ! grep -q "X PATCH" "$LOG" && ok || bad "rc=$RC out=$OUT"
 
 t "a version unpublished after an opted-in push is not published again by the next push"
 fresh; publish_version=new publish_build demo-v1.0.0-sdk-1.0.6 duplo.demo 1.0.0 1.0.6 extensions/demo >/dev/null 2>&1
