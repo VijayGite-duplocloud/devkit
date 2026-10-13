@@ -297,14 +297,14 @@ services:
   # below). Both routes are live; the compose network is simply the preferred one.
   builder:
     profiles: [tools]
-    # Deliberately ONE level of interpolation, not a nested ${BUILDER_IMAGE:-…:${BUILDER_TAG:-latest}}:
+    # Deliberately ONE level of interpolation, not a nested ${BUILDER_IMAGE:-…:${BUILDER_TAG:-…}}:
     # podman-compose 1.5 stops at the first '}' and appends the remainder literally, yielding
     # "…busybox:1.36}" and an "invalid reference format" error even when BUILDER_IMAGE is set. Nothing
-    # is lost — BUILDER_TAG is resolved into BUILDER_IMAGE by scripts/_builder.sh:builder_resolve_image,
-    # which always exports it before compose is invoked, so the default below is only ever reached by a
-    # hand-run `compose run` with no BUILDER_IMAGE set (where it now means :latest regardless of
-    # BUILDER_TAG — use the build scripts, or set BUILDER_IMAGE outright, to pin another tag).
-    image: ${BUILDER_IMAGE:-quay.io/duplocloud/duplo-extension-builder:latest}
+    # is lost — scripts/_builder.sh:builder_resolve_image resolves BUILDER_TAG and exports BUILDER_IMAGE
+    # before every build, so the default below is only ever reached by a hand-run `compose run` with no
+    # BUILDER_IMAGE set. It is the digest-pinned toolchain regardless of BUILDER_TAG, and must match
+    # _BUILDER_PINNED_IMAGE there (use the build scripts, or set BUILDER_IMAGE outright, to pick another).
+    image: ${BUILDER_IMAGE:-quay.io/duplocloud/duplo-extension-builder@sha256:8185e6a74379ae99e145f55608b3bc17e3037e95e64a612a226fe0eb15c0dbcd}
     # Unset by default, so the build runs on the host's native architecture. Set BUILDER_PLATFORM only
     # to force one (e.g. linux/amd64 if a publish ever ends up amd64-only) — an unset value is dropped
     # by compose, whereas copying duplo-ai-studio's linux/amd64 default would silently emulate a .NET
