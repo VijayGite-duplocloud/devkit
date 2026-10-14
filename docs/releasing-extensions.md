@@ -113,7 +113,7 @@ repository and one console extension, with an optional `"publish": true` (see "P
 {
   "schemaVersion": 1,
   "publishers": [
-    { "manifestId": "duplo.extensions.your-extension", "repository": "duplocloud/your-repo", "consoleExtension": "[console extension uuid]" }
+    { "manifestId": "com.duplocloud.your-extension", "repository": "duplocloud/your-repo", "consoleExtension": "[console extension uuid]" }
   ]
 }
 ```
