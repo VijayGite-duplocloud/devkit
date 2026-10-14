@@ -164,7 +164,7 @@ Your `extensions/` directory is **never** touched by any of these — it is only
 | `build-all.sh` | Build every `extensions/<name>/manifest.json` in the repo. What CI runs. |
 | `deploy-extension.sh <path-to-extension.zip>` | Hot-load one bundle onto the platform — no restart. |
 | `deploy-all.sh` | Hot-load every built bundle. Run after `build-all.sh`. |
-| `remove-extension.sh <extension-id>` | Unload and delete a loaded extension by its manifest id, e.g. `duplo.examples.helloworld`. |
+| `remove-extension.sh <extension-id>` | Unload and delete a loaded extension by its manifest id, e.g. `com.duplocloud.helloworld`. |
 
 `build-extension.sh` refuses to build an extension whose naming is wrong — REST segments must start with
 `extensions/`, Mongo collections must be prefixed `extension_`, and template `Hello`/`hw-` identifiers must
