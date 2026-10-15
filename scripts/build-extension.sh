@@ -131,6 +131,43 @@ if [ "$viol" -ne 0 ]; then
 fi
 echo "    naming OK"
 
+# Secret-field gate — heuristic, NOT exhaustive (see reference/21-secrets.md). A `string`/`string?`
+# property whose name looks like a password/token/key and carries no [SecretValue] (or [AgentSecretValue])
+# attribute within the few lines above it fails the build. This catches the common case — a field added
+# without ever reading 21-secrets.md — not every shape a secret can take: it does not see fields renamed
+# away from these keywords, secrets stuffed into AdditionalCustomSpec/ExtraConfigs (untyped — no attribute
+# is possible there regardless), or non-string secret types. A false positive (e.g. a non-secret field that
+# happens to contain "secret", like a resource ARN) is silenced with a same-block comment:
+#   // secret-field-exception: <reason this field is not actually sensitive>
+echo "==> Checking for un-attributed secret-looking fields (reference/21-secrets.md)"
+if [ -d "$DIR/backend" ]; then
+  cs_files=$(find "$DIR/backend" -name '*.cs' -not -path '*/obj/*' -not -path '*/bin/*' -not -path '*/sdk-packages/*' -not -path '*/_sdkbaseline/*')
+  if [ -n "$cs_files" ]; then
+    secret_lint_out=$(awk '
+      { lines[FILENAME, FNR] = $0 }
+      /^[[:space:]]*public[[:space:]]+string\??[[:space:]]+[A-Za-z0-9_]+[[:space:]]*\{[[:space:]]*get;[[:space:]]*set;/ {
+        name = $0
+        sub(/.*public[[:space:]]+string\??[[:space:]]+/, "", name)
+        sub(/[[:space:]]*\{.*/, "", name)
+        lname = tolower(name)
+        if (lname ~ /password|secret|token|apikey|api_key|credential|passphrase|privatekey|accesskey/) {
+          covered = 0
+          start = (FNR - 6 < 1 ? 1 : FNR - 6)
+          for (i = start; i <= FNR; i++) {
+            if (lines[FILENAME, i] ~ /\[SecretValue/ || lines[FILENAME, i] ~ /secret-field-exception:/) { covered = 1; break }
+          }
+          if (!covered) {
+            printf "  ✗ %s:%d: property \"%s\" looks like a secret but has no [SecretValue] attribute (or a // secret-field-exception: comment) nearby\n", FILENAME, FNR, name
+            viol = 1
+          }
+        }
+      }
+      END { exit (viol ? 1 : 0) }
+    ' $cs_files) || { echo "$secret_lint_out" >&2; echo "ERROR: un-attributed secret-looking field(s) — fix with [SecretValue] (reference/21-secrets.md) or a // secret-field-exception: comment." >&2; exit 1; }
+  fi
+fi
+echo "    secret-field check OK"
+
 echo "==> Fetching SDK feed from $BASE_URL"
 auth=()
 [ -n "${TOKEN:-}" ] && auth=(-H "Authorization: Bearer $TOKEN")
