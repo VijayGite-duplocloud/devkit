@@ -125,14 +125,24 @@ public class SecretFieldServiceAccountHooks
 
         if (await _encryption.IsEncryptedAsync(stored, cancellationToken))
         {
-            var plaintext = await _encryption.DecryptAsync(stored, cancellationToken);
-            entity.Spec!.Password = plaintext;
-            _redaction.AddSecret(plaintext); // re-register on every read — the registry is in-memory only
+            try
+            {
+                var plaintext = await _encryption.DecryptAsync(stored, cancellationToken);
+                entity.Spec!.Password = plaintext;
+                _redaction.AddSecret(plaintext); // re-register on every read — the registry is in-memory only
+            }
+            catch (Exception ex)
+            {
+                // A value that still looks encrypted after a failed decrypt is left as ciphertext rather
+                // than thrown here — [SecretValue(ExcludeFromResponse=true)] already keeps it out of every
+                // response either way, so a GET/List never 500s over it. RevealPasswordAsync (service,
+                // below) is where a decrypt failure is surfaced explicitly to a caller who needs the real
+                // value. This catch is what actually delivers that; without it the exception would
+                // propagate straight through GetByIdAsync and pre-empt RevealPasswordAsync's own check.
+                Logger.LogError(ex,
+                    "OnPostReadAsync: failed to decrypt stored password for SecretFieldServiceAccount {Id}", entity.Id);
+            }
         }
-        // A value that still looks encrypted after a failed decrypt is left as ciphertext rather than
-        // thrown here — [SecretValue(ExcludeFromResponse=true)] already keeps it out of every response
-        // either way, so a GET/List never 500s over it. RevealPasswordAsync (service, below) is where a
-        // decrypt failure is surfaced explicitly to a caller who actually needs the real value.
     }
 
     /// <summary>
@@ -207,7 +217,13 @@ public class SecretFieldServiceAccountService
         SecretFieldServiceAccount resource, CancellationToken ct = default)
     {
         var cipher = resource.Spec?.Password;
-        if (string.IsNullOrWhiteSpace(cipher) || resource.Spec is null)
+        // The IsEncryptedAsync check matters here as much as it does in OnPostReadAsync/EncryptPasswordAsync:
+        // if this resource was already read through the normal entity pipeline before reaching this call
+        // (OnPostReadAsync decrypts Spec.Password in place), `cipher` is already plaintext here. Decrypting
+        // it a second time would either throw or hand the agent a corrupted value — the decrypt-side mirror
+        // of the double-encryption bug fixed above. Skip straight to the base serializer in that case.
+        if (string.IsNullOrWhiteSpace(cipher) || resource.Spec is null
+            || !await _encryption.IsEncryptedAsync(cipher, ct))
             return await base.GetExpandedSpecForAgentAsync(resource, ct);
 
         var plaintext = await _encryption.DecryptAsync(cipher, ct);
