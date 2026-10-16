@@ -8,9 +8,10 @@ import { StatusBadgeComponent } from '../shared/status-badge.component';
 import { LifecyclePhase, LifecycleRailComponent, RailFact } from '../shared/lifecycle-rail.component';
 
 // Detail view on the Extension Studio's Template-G shell (reference/19-detail-page.md), copied from
-// templates/helloworld's view-hello.component.ts. The one addition is "Reveal password" in the ⋮ menu —
-// the frontend half of reference/21-secrets.md's reveal-endpoint recipe: the real value is fetched
-// on demand, shown transiently, and never stored in component state longer than the alert is visible.
+// templates/helloworld's view-hello.component.ts. The one addition is the eye icon on the Password
+// tile — the frontend half of reference/21-secrets.md's reveal-endpoint recipe: the real value is
+// fetched on demand, shown inline in the SAME tile, and cleared back to masked on toggle or navigation
+// — never cached anywhere longer than that.
 @Component({
   selector: 'sf-view',
   imports: [CommonLibComponentsModule, StatusBadgeComponent, LifecycleRailComponent],
@@ -41,14 +42,6 @@ import { LifecyclePhase, LifecycleRailComponent, RailFact } from '../shared/life
             </div>
           </div>
           <div class="g-actions">
-            @if (revealedPassword(); as pw) {
-              <div class="alert alert-info py-50 px-75 mb-0 mr-50 d-flex align-items-center">
-                <span class="mono mr-50">{{ pw }}</span>
-                <button type="button" class="btn btn-sm btn-flat-secondary p-0" (click)="revealedPassword.set(null)">
-                  <i data-feather="x" size="14"></i>
-                </button>
-              </div>
-            }
             <div class="seg" role="group" aria-label="View">
               <button type="button" [class.active]="view() === 'spec'" (click)="view.set('spec')">Spec</button>
               <button type="button" [class.active]="view() === 'result'" (click)="view.set('result')">Result</button>
@@ -62,12 +55,6 @@ import { LifecyclePhase, LifecycleRailComponent, RailFact } from '../shared/life
               </button>
               <div ngbDropdownMenu>
                 <a ngbDropdownItem (click)="edit()"><i data-feather="edit" class="mr-50"></i> Edit</a>
-                <!-- The ONE place the real password ever reaches the browser — fetched on demand, shown
-                     transiently in the banner above, never persisted to component state beyond it. Gated
-                     server-side by the separately-grantable secretfield.secret.read action. -->
-                <a ngbDropdownItem (click)="revealPassword()">
-                  <i data-feather="eye" class="mr-50"></i> {{ revealing() ? 'Revealing…' : 'Reveal password' }}
-                </a>
               </div>
             </div>
           </div>
@@ -79,12 +66,35 @@ import { LifecyclePhase, LifecycleRailComponent, RailFact } from '../shared/life
               <div class="g-sec pt-1">
                 <div class="g-sec-h"><h3>Requested spec</h3></div>
                 <div class="g-tiles c3">
-                  @for (t of specTiles(); track t.label) {
-                    <div class="g-tile">
-                      <div class="g-tl">{{ t.label }}</div>
-                      <span class="g-tv">{{ t.value }}</span>
-                    </div>
-                  }
+                  <div class="g-tile">
+                    <div class="g-tl">Username</div>
+                    <span class="g-tv">{{ it.spec?.username || '—' }}</span>
+                  </div>
+                  <!-- The ONE place the real password ever reaches the browser — fetched on demand,
+                       shown inline here, cleared back to masked on toggle. Gated server-side by the
+                       separately-grantable secretfield.secret.read action. See reference/21-secrets.md. -->
+                  <div class="g-tile">
+                    <div class="g-tl">Password</div>
+                    <span class="g-tv">
+                      @if (revealedPassword(); as pw) {
+                        <span class="mono">{{ pw }}</span>
+                        <button type="button" class="btn btn-sm btn-flat-secondary p-0 ml-50"
+                                aria-label="Hide password" (click)="revealedPassword.set(null)">
+                          <i data-feather="eye-off" size="14"></i>
+                        </button>
+                      } @else {
+                        <span>••••</span>
+                        <button type="button" class="btn btn-sm btn-flat-secondary p-0 ml-50"
+                                aria-label="Reveal password" [disabled]="revealing()" (click)="revealPassword()">
+                          <i data-feather="eye" size="14"></i>
+                        </button>
+                      }
+                    </span>
+                  </div>
+                  <div class="g-tile">
+                    <div class="g-tl">Created</div>
+                    <span class="g-tv">{{ fmt(it.createdAt) }}</span>
+                  </div>
                 </div>
               </div>
             } @else {
@@ -196,15 +206,6 @@ export class ViewSecretFieldServiceAccountComponent implements OnInit {
         subtitle: ready ? `${it.result?.accountId ? 'Account created' : 'Complete'} · ${this.fmt(it.updatedAt)}` : undefined,
         state: ready ? 'done' : 'todo',
       },
-    ];
-  });
-
-  protected readonly specTiles = computed(() => {
-    const it = this.item();
-    return [
-      { label: 'Username', value: it?.spec?.username || '—' },
-      { label: 'Password', value: '•••• (set) — use Reveal password' },
-      { label: 'Created', value: this.fmt(it?.createdAt) },
     ];
   });
 

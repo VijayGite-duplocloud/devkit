@@ -75,7 +75,7 @@ public class MyResourceHooks : ResourceHooksBase<MyResource, MyResourceSpec, MyR
     }
 
     // PATCH semantics (see below): absent/null in the incoming spec means "keep what's stored" —
-    // never persist null over a real value. Only a genuinely new, non-empty value is encrypted.
+    // never persist null over a real value. Only a genuinely new, non-empty PLAINTEXT value is encrypted.
     private async Task EncryptPasswordAsync(MyResource entity, MyResource? existing, CancellationToken ct)
     {
         var incoming = entity.Spec?.Password;
@@ -84,6 +84,16 @@ public class MyResourceHooks : ResourceHooksBase<MyResource, MyResourceSpec, MyR
             if (entity.Spec != null) entity.Spec.Password = existing?.Spec?.Password; // keep existing ciphertext
             return;
         }
+        // REQUIRED, not optional: OnPreUpdateAsync fires on every update that round-trips the full
+        // entity — not only a user's PATCH, but also internal platform updates such as stamping
+        // TicketContext once the provisioning ticket exists. Those carry the password exactly as last
+        // persisted, i.e. already ciphertext. Skipping this check re-encrypts already-encrypted
+        // ciphertext as if it were new plaintext — and again on every subsequent internal update —
+        // silently corrupting the value past what one DecryptAsync call can recover. This is not a
+        // hypothetical: it happened on the very first resource built from an earlier draft of this
+        // recipe that omitted the check.
+        if (await _encryption.IsEncryptedAsync(incoming, ct))
+            return;
         _redaction.AddSecret(incoming);                 // plaintext still in hand — register before encrypting
         entity.Spec!.Password = await _encryption.EncryptAsync(incoming, ct);
     }
@@ -112,6 +122,51 @@ hooks class never blanks it. Keeping it out of responses is handled once, generi
 `[SecretValue(ExcludeFromResponse = true)]` at the serialization boundary; keeping it out of the agent is
 handled once, generically, by `[AgentSecretValue]`. Nothing in your controller or service needs to scrub
 anything.
+
+## The agent-spec serializer override — REQUIRED if you combine `[AgentSecretValue]` with at-rest encryption
+
+This step is easy to skip because nothing fails loudly without it — the build succeeds, the agent still
+never sees the password, and the sibling `shared/<subtype>.secrets.json` file still gets created. It just
+contains a value no skill can actually use.
+
+Here's why: `[AgentSecretValue]`'s host-side redaction (`ResourceProvisioningManager.RedactAgentSpecSecrets`)
+only **moves** whatever value is already in the agent-spec JSON into the sibling file — it has no concept
+of decryption. That JSON comes from `GetExpandedSpecForAgentAsync`, whose **default implementation
+serializes the entity exactly as handed in** — which, per the hooks above, is ciphertext (nothing decrypts
+it between `OnPreCreateAsync` and this call). So without an override, the sibling file ends up holding the
+same ciphertext Mongo has — useless to a skill that needs the real password to actually authenticate
+somewhere. (This is not hypothetical: it's the exact gap that let `samples/secret-field` ship with this
+bug the first time — the sample's own `provision.sh` never surfaced it because it only checks whether the
+field is *present*, never tries to use the value for anything real.)
+
+Mirror the platform's own fix for this (`AzureVirtualMachineService.GetExpandedSpecForAgentAsync`) on your
+resource's service class — decrypt, let the base method serialize, then restore the ciphertext so nothing
+downstream that reuses this same in-memory entity ever sees the plaintext:
+
+```csharp
+public override async Task<string> GetExpandedSpecForAgentAsync(MyResource resource, CancellationToken ct = default)
+{
+    var cipher = resource.Spec?.Password;
+    if (string.IsNullOrWhiteSpace(cipher) || resource.Spec is null)
+        return await base.GetExpandedSpecForAgentAsync(resource, ct);
+
+    var plaintext = await _encryption.DecryptAsync(cipher, ct);
+    resource.Spec.Password = plaintext;
+    try
+    {
+        return await base.GetExpandedSpecForAgentAsync(resource, ct);   // bakes plaintext into the JSON string
+    }
+    finally
+    {
+        resource.Spec.Password = cipher;                                // never skip this, even on an exception path
+    }
+}
+```
+
+`scripts/build-extension.sh`'s build gate fails your build if it finds `[AgentSecretValue]` plus your own
+`EncryptAsync` call with no override like this anywhere in the backend — but that check can only confirm
+an override **exists**, not that it's correct (e.g. that you actually restore the ciphertext in `finally`).
+Treat the lint as a floor, not a substitute for the verification checklist at the end of this doc.
 
 ## The reveal endpoint
 
@@ -194,3 +249,25 @@ from every GET, there is nothing to pre-populate — build the edit form accordi
 - **Worker mode is not exempt** — `entity.Result` written via `SaveProgressAsync` goes through the same
   response serializer, so layer 1 already covers it; just don't log the plaintext in `Logger.Log*` calls
   along the way.
+
+## Verification checklist — run this for real, every time
+
+`scripts/build-extension.sh`'s lint catches the common mistake (a field with no attribute at all, or
+`[AgentSecretValue]` + your own encryption with no decrypting override). It cannot catch whether your
+override is semantically correct, whether your encryption logic is idempotent across repeated updates, or
+whether the target platform actually has `IMongoEncryptionProvider`/`ISecretRedactionService` bridged into
+extension DI containers at all (a host capability, not a devkit one — see your platform's release notes).
+Both real bugs this doc now warns about were found by *running* the extension, not by reading the code —
+do the same before calling this done:
+
+1. Create a resource with the secret field set. Confirm the GET response has no value for it at all.
+2. Open its provisioning ticket's workdir. Confirm `shared/<subtype>.json` has the field as `null`, and
+   `shared/<subtype>.secrets.json` exists.
+3. **Confirm the sibling file's value is genuinely usable** — not another ciphertext blob. If you have
+   nothing else to compare it against, this is what the `GetExpandedSpecForAgentAsync` override above is
+   for; skipping it is invisible until a skill actually tries to use the value.
+4. Trigger at least one more update to the resource after creation (an edit, or just let the platform
+   stamp `TicketContext` on it, which happens automatically once the ticket exists). Reveal the password
+   again — it must still be the original value. This is the one step that catches double-encryption; it
+   will not show up after a single create.
+5. Reveal the password through your endpoint and confirm it matches what you originally typed.

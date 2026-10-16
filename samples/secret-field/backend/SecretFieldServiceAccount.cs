@@ -138,8 +138,19 @@ public class SecretFieldServiceAccountHooks
     /// <summary>
     /// PATCH semantics (reference/04-hooks.md: spec is replaced wholesale, reference/21-secrets.md: don't
     /// let an edit silently wipe the secret) — a blank/absent password in the incoming spec means "keep
-    /// what's stored", never "clear it". Only a genuinely new, non-empty value is registered for
-    /// redaction and (re-)encrypted.
+    /// what's stored", never "clear it". Only a genuinely new, non-empty PLAINTEXT value is registered
+    /// for redaction and encrypted.
+    /// <para>
+    /// <b>Why the <c>IsEncryptedAsync</c> check is required, not optional:</b> <c>OnPreUpdateAsync</c>
+    /// fires on every update that round-trips the full entity — not only a user's PATCH, but also
+    /// internal platform updates such as stamping <c>TicketContext</c> once the provisioning ticket
+    /// exists. Those carry the password exactly as last persisted, i.e. already ciphertext. Without
+    /// this check, a non-empty-but-already-encrypted value would be fed back into <c>EncryptAsync</c>
+    /// and encrypted a SECOND time — and again on every subsequent internal update — silently
+    /// corrupting the stored value past what a single <c>DecryptAsync</c> call can recover. Confirmed
+    /// live: the ticket's shared/*.secrets.json value differed from the freshly-inserted Mongo value
+    /// because the TicketContext-stamping update (which fires ~1 write after create) re-encrypted it.
+    /// </para>
     /// </summary>
     private async Task EncryptPasswordAsync(
         SecretFieldServiceAccount entity, SecretFieldServiceAccount? existing, CancellationToken cancellationToken)
@@ -152,7 +163,10 @@ public class SecretFieldServiceAccountHooks
             return;
         }
 
-        _redaction.AddSecret(incoming); // plaintext still in hand — register before encrypting
+        if (await _encryption.IsEncryptedAsync(incoming, cancellationToken))
+            return; // already ciphertext (an internal update replayed it) — leave it untouched
+
+        _redaction.AddSecret(incoming); // genuinely new plaintext — register before encrypting
         entity.Spec!.Password = await _encryption.EncryptAsync(incoming, cancellationToken);
     }
 }
@@ -176,6 +190,36 @@ public class SecretFieldServiceAccountService
         : base(repository, logger, scopeFactory, httpContextAccessor)
     {
         _encryption = encryption;
+    }
+
+    /// <summary>
+    /// The base implementation serializes <paramref name="resource"/> exactly as handed in — still
+    /// ciphertext, since nothing decrypts it between <c>OnPreCreateAsync</c> and this call. The host's
+    /// generic <c>[AgentSecretValue]</c> redaction (<c>ResourceProvisioningManager.RedactAgentSpecSecrets</c>)
+    /// only MOVES whatever value is already in the JSON into the sibling <c>.secrets.json</c> file — it
+    /// has no idea how to decrypt anything. Without this override, that sibling file ends up holding the
+    /// same useless ciphertext as the main file would have, instead of the real password a skill needs to
+    /// actually use. Mirrors <c>AzureVirtualMachineService.GetExpandedSpecForAgentAsync</c> exactly:
+    /// decrypt, serialize, then restore the ciphertext on the entity so nothing else downstream — the
+    /// in-memory object this same request might still use afterward — ever sees the plaintext.
+    /// </summary>
+    public override async Task<string> GetExpandedSpecForAgentAsync(
+        SecretFieldServiceAccount resource, CancellationToken ct = default)
+    {
+        var cipher = resource.Spec?.Password;
+        if (string.IsNullOrWhiteSpace(cipher) || resource.Spec is null)
+            return await base.GetExpandedSpecForAgentAsync(resource, ct);
+
+        var plaintext = await _encryption.DecryptAsync(cipher, ct);
+        resource.Spec.Password = plaintext;
+        try
+        {
+            return await base.GetExpandedSpecForAgentAsync(resource, ct);
+        }
+        finally
+        {
+            resource.Spec.Password = cipher;
+        }
     }
 
     /// <summary>

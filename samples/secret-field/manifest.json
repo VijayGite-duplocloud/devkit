@@ -2,11 +2,11 @@
   "manifestVersion": "1.0",
   "id": "com.duplocloud.secretfield",
   "name": "Secret Field Sample",
-  "version": "0.1.0",
+  "version": "0.1.4",
 
   "sdkVersion": "REPLACED_BY_SKILL_FROM_sdk-version_ENDPOINT",
   "backend": {
-    "assemblyDir": "com.duplocloud.secretfield/0.1.0/backend",
+    "assemblyDir": "com.duplocloud.secretfield/0.1.4/backend",
     "entryAssembly": "Duplo.Extension.SecretField.dll"
   },
 
@@ -26,7 +26,7 @@
   ],
 
   "skills": [
-    { "folder": "com.duplocloud.secretfield/0.1.0/skills/provision-secret-field-service-account", "isBuiltIn": true }
+    { "folder": "com.duplocloud.secretfield/0.1.4/skills/provision-secret-field-service-account", "isBuiltIn": true }
   ],
   "skillMappings": [
     {
