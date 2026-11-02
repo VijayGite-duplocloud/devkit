@@ -2,7 +2,7 @@
   "manifestVersion": "1.0",
   "id": "com.duplocloud.secretfield",
   "name": "Secret Field Sample",
-  "version": "0.1.4",
+  "version": "0.1.5",
 
   "sdkVersion": "REPLACED_BY_SKILL_FROM_sdk-version_ENDPOINT",
   "backend": {
