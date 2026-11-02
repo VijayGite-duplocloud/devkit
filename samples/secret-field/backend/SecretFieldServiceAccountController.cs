@@ -53,6 +53,20 @@ public class SecretFieldServiceAccountsController
         Description = "Decrypts and returns the real service-account password. A materially bigger grant than ordinary read access.")]
     public async Task<IActionResult> RevealPassword(string id, CancellationToken cancellationToken)
     {
+        // The base ResourcesController.GetById checks the resource actually belongs to the route's
+        // workspace before returning it (CheckResourceBelongsToRouteWorkspaceAsync — private, so not
+        // directly reusable from here). This custom endpoint bypasses that base action entirely, so it
+        // needs the same guard explicitly: a route workspaceId that doesn't match the resource's own
+        // OwnerWorkspaceId gets the identical 404 the base action would give. (EnforceHierarchicalAccess
+        // already denies a caller who lacks permission in the resource's REAL workspace, so this isn't an
+        // open hole without it — but every custom endpoint on a resource like this should still match the
+        // base action's behavior, since this is the template other extensions copy.)
+        var workspaceId = GetWorkspaceIdFromRoute();
+        var owner = await ResourceServiceFacet.GetByIdUnenrichedAsync(id, cancellationToken);
+        if (owner == null || owner.OwnerWorkspaceId != workspaceId)
+            return NotFound(ApiResponse<object>.ErrorResult(
+                "Not Found", $"Resource {id} not found in workspace {workspaceId}"));
+
         try
         {
             var value = await _service.RevealPasswordAsync(id, cancellationToken);

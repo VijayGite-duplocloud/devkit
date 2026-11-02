@@ -132,9 +132,12 @@ fi
 echo "    naming OK"
 
 # Secret-field gate — heuristic, NOT exhaustive (see reference/21-secrets.md). A `string`/`string?`
-# property whose name looks like a password/token/key and carries no [SecretValue] (or [AgentSecretValue])
-# attribute within the few lines above it fails the build. This catches the common case — a field added
-# without ever reading 21-secrets.md — not every shape a secret can take: it does not see fields renamed
+# property whose name looks like a password/token/key and carries no [SecretValue] attribute within the
+# few lines above it fails the build — the awk below only matches `\[SecretValue`, so a property carrying
+# ONLY [AgentSecretValue] (no [SecretValue]) still fails this gate too. That's deliberate, not a bug: such
+# a field would still leak in full in every GET/List/Create/Update/PATCH response, which [AgentSecretValue]
+# alone does nothing to prevent. This catches the common case — a field added without ever reading
+# 21-secrets.md — not every shape a secret can take: it does not see fields renamed
 # away from these keywords, secrets stuffed into AdditionalCustomSpec/ExtraConfigs (untyped — no attribute
 # is possible there regardless), or non-string secret types. A false positive (e.g. a non-secret field that
 # happens to contain "secret", like a resource ARN) is silenced with a same-block comment:
@@ -173,12 +176,15 @@ echo "    secret-field check OK"
 # (calls .EncryptAsync( anywhere) needs a GetExpandedSpecForAgentAsync override that decrypts BEFORE the
 # host's generic [AgentSecretValue] redaction runs — otherwise the sibling shared/<subtype>.secrets.json
 # file a skill reads with jq ends up holding the same useless ciphertext Mongo has. This is not
-# hypothetical: it's the exact bug samples/secret-field shipped with before this check existed (and, by
-# the same absence of such an override, is suspected to affect the first-party AWSRdsInstance/
-# AWSRdsCluster/AWSElastiCache DevOps resources too — out of scope for this gate, which only covers
-# extensions). This check can only confirm the override EXISTS, not that it's implemented correctly
-# (e.g. that it restores the ciphertext in a `finally`) — see 21-secrets.md's verification checklist for
-# the rest. A false positive is silenced the same way as the check above:
+# hypothetical: it's the exact bug samples/secret-field shipped with before this check existed. The
+# first-party AWSRdsInstance/AWSRdsCluster/AWSElastiCache DevOps resources do NOT need this override —
+# confirmed they restore plaintext in OnPostCreateAsync/OnPostUpdateAsync specifically so the agent-spec
+# serializer already sees a decrypted entity; don't "fix" them to add one. This check can only confirm the
+# override EXISTS, not that it's implemented correctly (e.g. that it restores the ciphertext in a
+# `finally`), nor whether this resource's hooks even need one at all (see 21-secrets.md's two entity-hook
+# patterns) — see 21-secrets.md's verification checklist for the rest. A false positive (this resource
+# restores plaintext after every write instead, so the override would be redundant) is silenced the same
+# way as the check above:
 #   // agent-secret-spec-exception: <reason this resource doesn't need the override>
 #
 # NOTE for later: if the host's RedactAgentSpecSecrets is ever changed to auto-decrypt generically (using

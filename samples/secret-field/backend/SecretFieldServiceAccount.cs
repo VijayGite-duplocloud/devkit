@@ -133,12 +133,15 @@ public class SecretFieldServiceAccountHooks
             }
             catch (Exception ex)
             {
-                // A value that still looks encrypted after a failed decrypt is left as ciphertext rather
-                // than thrown here — [SecretValue(ExcludeFromResponse=true)] already keeps it out of every
-                // response either way, so a GET/List never 500s over it. RevealPasswordAsync (service,
-                // below) is where a decrypt failure is surfaced explicitly to a caller who needs the real
-                // value. This catch is what actually delivers that; without it the exception would
-                // propagate straight through GetByIdAsync and pre-empt RevealPasswordAsync's own check.
+                // IMongoEncryptionProvider.DecryptAsync fails CLOSED by default on this platform version —
+                // it throws rather than silently returning the ciphertext unchanged, unless an operator has
+                // opted into Encryption:AllowUnencryptedFallback (off by default). Catching here is what
+                // keeps that failure from reaching the caller as an unhandled 500: a value that still looks
+                // encrypted after a failed decrypt is left as ciphertext — [SecretValue(ExcludeFromResponse
+                // =true)] already keeps it out of every response either way, so a GET/List stays safe.
+                // RevealPasswordAsync (service, below) is where a decrypt failure is surfaced explicitly to
+                // a caller who actually needs the real value; without this catch, the exception would
+                // propagate straight through GetByIdAsync and pre-empt that check entirely.
                 Logger.LogError(ex,
                     "OnPostReadAsync: failed to decrypt stored password for SecretFieldServiceAccount {Id}", entity.Id);
             }
@@ -161,6 +164,17 @@ public class SecretFieldServiceAccountHooks
     /// live: the ticket's shared/*.secrets.json value differed from the freshly-inserted Mongo value
     /// because the TicketContext-stamping update (which fires ~1 write after create) re-encrypted it.
     /// </para>
+    /// <para>
+    /// <b>Why a blank edit must NOT return early:</b> <c>existing</c> reaches this hook already decrypted
+    /// — <c>MongoRepository.UpdateAsync</c> re-fetches the current row via <c>GetByIdAsync</c>, which runs
+    /// <c>OnPostReadAsync</c> (above) before <c>OnPreUpdateAsync</c> ever sees it. So
+    /// <c>existing.Spec.Password</c> is PLAINTEXT at this point, not ciphertext, despite what its name
+    /// suggests. Copying it straight onto <c>entity.Spec.Password</c> and returning — what an earlier
+    /// version of this method did — persisted that plaintext to Mongo on every edit that left Password
+    /// blank. The fix: feed the copied value back into <c>incoming</c> so it falls through to the same
+    /// <c>IsEncryptedAsync</c>/<c>EncryptAsync</c> path a genuinely new password takes — the same shape
+    /// <c>AWSRdsInstanceHooks.OnPreUpdateAsync</c> already uses for this exact situation (no early return).
+    /// </para>
     /// </summary>
     private async Task EncryptPasswordAsync(
         SecretFieldServiceAccount entity, SecretFieldServiceAccount? existing, CancellationToken cancellationToken)
@@ -168,15 +182,18 @@ public class SecretFieldServiceAccountHooks
         var incoming = entity.Spec?.Password;
         if (string.IsNullOrEmpty(incoming))
         {
-            if (entity.Spec != null)
-                entity.Spec.Password = existing?.Spec?.Password; // keep existing ciphertext
-            return;
+            // `existing` is already plaintext (see above) — fall through instead of returning, so it gets
+            // re-encrypted below exactly like a freshly-typed password would.
+            incoming = existing?.Spec?.Password;
+            if (string.IsNullOrEmpty(incoming) || entity.Spec is null)
+                return; // nothing was stored before, and nothing new now — leave it unset
+            entity.Spec.Password = incoming;
         }
 
         if (await _encryption.IsEncryptedAsync(incoming, cancellationToken))
             return; // already ciphertext (an internal update replayed it) — leave it untouched
 
-        _redaction.AddSecret(incoming); // genuinely new plaintext — register before encrypting
+        _redaction.AddSecret(incoming); // genuinely new (or re-copied) plaintext — register before encrypting
         entity.Spec!.Password = await _encryption.EncryptAsync(incoming, cancellationToken);
     }
 }

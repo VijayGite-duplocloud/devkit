@@ -61,9 +61,11 @@ import { SecretFieldServiceAccountService } from '../secret-field-service-accoun
                        (backend: [SecretValue(ExcludeFromResponse = true)]), so on Edit there is nothing to
                        pre-populate. The model starts blank either way; the placeholder communicates that a
                        value IS stored without ever showing it, and the field is required only on Create. -->
+                  <!-- minlength=8 matches ISecretRedactionService.AddSecret's MinSecretLength — shorter
+                       values are silently never redacted from streamed agent output (reference/21-secrets.md). -->
                   <input type="password" class="form-control" autocomplete="new-password" name="password"
                          [ngModel]="password()" (ngModelChange)="password.set($event)"
-                         [required]="!isEdit"
+                         [required]="!isEdit" minlength="8"
                          [placeholder]="isEdit ? '•••• — leave blank to keep' : 'Choose a password'"
                          validation-state validation-errors />
                   @if (isEdit) {

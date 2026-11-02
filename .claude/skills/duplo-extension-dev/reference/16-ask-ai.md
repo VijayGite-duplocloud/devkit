@@ -163,7 +163,9 @@ when the initial context needs server-side data the frontend can't see; otherwis
 above (simpler, mode-independent, zero backend changes).
 
 **This is the one path where a secret can genuinely leak into an Ask AI session.** Unlike the frontend path,
-these overrides run server-side with the real, decrypted `entity.Spec`/`entity.Result` in hand —
+these overrides run server-side with the entity as your hooks leave it in memory — which is the real,
+decrypted value for hooks that decrypt on read, but still ciphertext for hooks that never do (see
+[21-secrets](21-secrets.md)'s two entity-hook patterns). Either way,
 `[SecretValue(ExcludeFromResponse = true)]` only strips a field from HTTP *responses*, and a hand-written
 `GetTicketMetadata()`/`GetTicketTitle()`/`GetProvisioningMessage()` is not one. Never interpolate a
 `[SecretValue]`/`[AgentSecretValue]`-marked field into any string these methods produce
