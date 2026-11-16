@@ -374,8 +374,8 @@ settings once. `frontend.setup` points the portal at it:
   the fallback (the `catchError` branches, `FALLBACK_KEY`, the `local` note).
 - **Existing settings route:** keep the old workspace route, with a guard that returns a `UrlTree` to
   `/ai/suite/admin/<relativeUrl>` (not `redirectTo`, which keeps the old URL so the setup mount check misses). The
-  guard must not fire on the setup mount. Remove the old menu entries. Reference: `extension.routes.ts:12` in
-  duploai-issue-reporter.
+  guard must not fire on the setup mount. Remove the old menu entries. Reference: the `settings` route in
+  duploai-issue-reporter's `extension.routes.ts` (setup check in `setup-mount.ts`).
 
 #### Build check
 
