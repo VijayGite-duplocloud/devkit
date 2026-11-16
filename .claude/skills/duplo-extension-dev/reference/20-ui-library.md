@@ -194,7 +194,7 @@ with `FormsModule` (or `SharedFormsModule`, which re-exports it) for `ngModel`.
 
 Without `type` or `typeDefinition`, "+ New" is hidden. `alsoTypes` (default none, strict) lists connections of
 those provider types beside the main type; "+ New" still creates the main type. Use it for providers admins made
-by hand ([07](07-scope-credentials.md#connections-made-by-hand)). The template's setup page is the worked example:
+by hand ([07](07-scope-credentials.md#connections-made-by-hand)). The template's setup page (`setup/setup.component.html`) shows the basic form; these snippets add `(connected)` and `alsoTypes`:
 
 ```html
 <duplo-connection-field category="other" [typeDefinition]="clickUpType"

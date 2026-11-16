@@ -12,6 +12,10 @@ kind=$(jq -r '(if type == "object" then .frontend else null end) | (if type == "
 [ "$kind" != "null" ] || exit 0
 [ "$kind" = "object" ] || { bad "frontend.setup must be an object"; exit 1; }
 
+# The portal drops a setup entry whose manifest has a blank id or no remoteEntry.
+jq -e '.id | type == "string" and test("\\S")' "$M" >/dev/null || bad "manifest id must be a non-blank string"
+jq -e '.frontend.remote.remoteEntry? | type == "string" and length > 0' "$M" >/dev/null || bad "frontend.remote.remoteEntry is required"
+
 url=$(jq -r '.frontend.setup.relativeUrl | if type == "string" then . else "" end' "$M")
 if [ -z "$url" ]; then
   bad "frontend.setup.relativeUrl is required"
@@ -23,6 +27,7 @@ else
   fi
 fi
 
+# Stricter than the portal on purpose: the portal reads a null title as unset.
 if jq -e '.frontend.setup | has("title") and (.title | type) != "string"' "$M" >/dev/null; then
   bad "frontend.setup.title must be a string"
 fi
@@ -30,8 +35,8 @@ fi
 # Build-only: the frontend's setup-page guard matches this path, so its SETUP_PATH must equal relativeUrl.
 src="$(dirname "$M")/frontend/src"
 if [ -n "$url" ] && [ -d "$src" ]; then
-  vals=$( { grep -rhoE "^[[:space:]]*(export[[:space:]]+)?const SETUP_PATH[[:space:]]*=[[:space:]]*['\"][^'\"]*['\"]" "$src" 2>/dev/null || true; } \
-          | sed -E "s/^[^'\"]*['\"]([^'\"]*)['\"]$/\1/")
+  vals=$( { grep -rhoE "^[[:space:]]*(export[[:space:]]+)?const SETUP_PATH[[:space:]]*(:[^=]*)?=[[:space:]]*['\"\`][^'\"\`]*['\"\`]" "$src" 2>/dev/null || true; } \
+          | sed -E "s/^[^'\"\`]*['\"\`]([^'\"\`]*)['\"\`]$/\1/")
   if ! printf '%s\n' "$vals" | grep -qxF -- "$url"; then
     found=$(printf '%s' "$vals" | head -3 | tr '\n' ' ')
     bad "frontend/src has no SETUP_PATH = '$url' (frontend.setup.relativeUrl; the setup page's canMatch reads it)${found:+ — found: $found}"

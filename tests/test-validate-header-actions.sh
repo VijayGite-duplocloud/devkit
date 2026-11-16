@@ -189,6 +189,18 @@ elif [[ "$OUT" != *"template 'Hello'/'hw-' identifiers"* ]]; then bad "no leftov
 else ok; fi
 rm -rf "$TMP/ext/frontend"
 
+# Each leftover template setup name fails the naming gate on its own.
+for s in "selector: 'hw-setup'" "interface HelloSettings {}" "const K = 'helloworld.settings';" 'const T = { type: "helloworld" };'; do
+  mk "$(wrap "[$ACT]")"; mkdir -p "$TMP/ext/frontend/src"
+  printf '%s\n' "$s" > "$TMP/ext/frontend/src/a.ts"
+  t "--validate-only fails a renamed extension that keeps: $s"
+  OUT="$(run_build "$TMP/ext")"; RC=$?
+  if [ "$RC" = 0 ] || [ "$RC" = 99 ]; then bad "rc=$RC: $OUT"
+  elif [[ "$OUT" != *"template 'Hello'/'hw-' identifiers"* ]]; then bad "no leftover line: $OUT"
+  else ok; fi
+  rm -rf "$TMP/ext/frontend"
+done
+
 # frontend.setup is validated by the naming gate.
 mk '{"id":"e","frontend":{"setup":{"relativeUrl":"clouds/x"}}}'
 t "--validate-only fails an invalid frontend.setup"

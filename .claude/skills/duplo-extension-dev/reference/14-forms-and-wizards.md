@@ -57,8 +57,13 @@ form like any other control:
 
 - A not-found value shows as a disabled "… not found" option. While the list loads, or after it fails, the value
   is kept and counts as valid — so a saved value moves between levels unchanged.
-- Gate Save on `f.invalid` only while a "+ New" is pending: it keeps the form invalid until the admin adds it. Don't
-  gate on a not-found value; the backend tolerates a stale scope.
+- `f.invalid` is true for every key above, so `[disabled]="f.invalid"` blocks Save on a pending "+ New" and on a
+  not-found value; the admin must pick one that exists. The template's setup page does this.
+- To block only on a pending "+ New" (level 2), test the `*Pending` keys instead of `f.invalid`, in both
+  `[disabled]` and `(ngSubmit)`. Level 1 has no pending key: its "+ New" runs in a modal.
+  ```html
+  <button type="submit" [disabled]="prov.errors?.['providerPending'] || cred.errors?.['credentialPending'] || scope.errors?.['scopePending']">Save</button>
+  ```
 
 ## Multi-step wizards — there is NO library stepper
 

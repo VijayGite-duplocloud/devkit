@@ -88,8 +88,8 @@ and no `frontend/webpack.config.js`), the steps below are all you need.
   the `aiLabelConfig` pipe (`AILabelConfigPipe`) and the config helpers in `utils/ui-config`
   (`getUiConfig`, `brandTitle`, `brandText`, `resolveLabel`, `docsLink`, …), for the whitelabelled portal.
 - `AI_SUITE_LABEL_CONFIG` is marked deprecated; labels now come from the portal's `config.json` through `resolveLabel()`.
-- Behaviour change: the help-tooltip text is no longer fetched from a fixed GitHub URL. It loads only when
-  `links.helpTextJson` is set in the portal's `config.json`; otherwise the tooltips stay empty.
+- Behaviour change: the help-tooltip URL comes from `links.helpTextJson` in the portal's `config.json`. The library
+  default is the public help JSON; set it to `null` to skip the fetch (tooltips stay empty).
 - Nothing was removed. Nothing to change in an existing extension.
 
 ## What changed in 0.2.0
@@ -127,7 +127,7 @@ Either pack it from the platform UI repo:
 
 ```bash
 cd duplo-ui/portal && npm install && npm run pack:common-lib
-# → duplocloud-internal-ng-common-lib-0.2.0.tgz
+# → duplocloud-internal-ng-common-lib-0.8.0.tgz
 ```
 
 `pack:common-lib` builds both libraries, bundles the `ng-block-ui` fork into the package, and packs the
@@ -136,13 +136,13 @@ tarball in one step.
 Or pull the published one from GitHub Packages (needs a `read:packages` token):
 
 ```bash
-npm pack @duplocloud-internal/ng-common-lib@0.2.0
+npm pack @duplocloud-internal/ng-common-lib@0.8.0
 ```
 
 ### 2. Swap the vendored tarball
 
 **In this repo**, two vendoring schemes coexist — refresh both, or use
-`./scripts/refresh-common-lib.sh /path/to/duplocloud-internal-ng-common-lib-0.2.0.tgz` to do it in one shot.
+`./scripts/refresh-common-lib.sh /path/to/duplocloud-internal-ng-common-lib-0.8.0.tgz` to do it in one shot.
 The script drops the tarball into both locations, deletes the old one from each, and rewrites the `file:`
 dependency in every `package.json` that references it.
 
@@ -150,7 +150,7 @@ dependency in every `package.json` that references it.
   path is safe):
 
   ```bash
-  cp /path/to/duplocloud-internal-ng-common-lib-0.2.0.tgz packages/
+  cp /path/to/duplocloud-internal-ng-common-lib-0.8.0.tgz packages/
   rm packages/duplocloud-internal-ng-common-lib-<old-ver>.tgz
   ```
 
@@ -158,7 +158,7 @@ dependency in every `package.json` that references it.
 
   ```diff
   -    "@duplocloud-internal/ng-common-lib": "file:../../../packages/duplocloud-internal-ng-common-lib-<old-ver>.tgz",
-  +    "@duplocloud-internal/ng-common-lib": "file:../../../packages/duplocloud-internal-ng-common-lib-0.2.0.tgz",
+  +    "@duplocloud-internal/ng-common-lib": "file:../../../packages/duplocloud-internal-ng-common-lib-0.8.0.tgz",
   ```
 
 - **The `duplo-extension-dev` skill template** keeps its own copy at
@@ -167,7 +167,7 @@ dependency in every `package.json` that references it.
   must stay self-contained:
 
   ```bash
-  cp /path/to/duplocloud-internal-ng-common-lib-0.2.0.tgz \
+  cp /path/to/duplocloud-internal-ng-common-lib-0.8.0.tgz \
     .claude/skills/duplo-extension-dev/templates/helloworld/frontend/vendor/
   rm .claude/skills/duplo-extension-dev/templates/helloworld/frontend/vendor/duplocloud-internal-ng-common-lib-<old-ver>.tgz
   ```
@@ -192,8 +192,8 @@ grep -n "ng-common-lib" package-lock.json
 ```
 
 Both the `dependencies` entry and the `node_modules/@duplocloud-internal/ng-common-lib` entry should read
-`file:../../../packages/duplocloud-internal-ng-common-lib-0.2.0.tgz`, with `"version": "0.2.0"` and integrity
-`sha512-/69ZgZvvSNMoGO2GQnySpW7Upfd9zVmtNqFWTa/2oQHWcIIJ+M8JdBiv3jfeyk3kG6SfZHvdPD8OylfFLnjRng==`. The entry
+`file:../../../packages/duplocloud-internal-ng-common-lib-0.8.0.tgz`, with `"version": "0.8.0"` and integrity
+`sha512-kzmxKBUQq1B/mkthuCuqw9fQAOCFn+uX2k1g4vsYqmOsRFQAhftu3kaPmybXSdtR/zz+G4kgieJHJ9+kNSdTIg==`. The entry
 also carries `"bundleDependencies": ["ng-block-ui"]`.
 
 ### 4. Install and build

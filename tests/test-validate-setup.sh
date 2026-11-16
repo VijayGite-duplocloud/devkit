@@ -11,8 +11,12 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 V=./scripts/validate-setup.sh
 
-# run <json>: writes the manifest, sets RC and ERR from the validator.
-run() { printf '%s' "$1" > "$TMP/manifest.json"; ERR="$("$V" "$TMP/manifest.json" 2>&1 >/dev/null)"; RC=$?; }
+# run <json>: writes the manifest (adding a default id and remoteEntry when absent), sets RC and ERR from the validator.
+run() {
+  printf '%s' "$1" | jq -c 'if type == "object" and (.frontend | type) == "object"
+    then {id: "foo"} + (.frontend = ({remote: {remoteEntry: "remoteEntry.js"}} + .frontend)) else . end' > "$TMP/manifest.json"
+  ERR="$("$V" "$TMP/manifest.json" 2>&1 >/dev/null)"; RC=$?
+}
 # expect_fail <json> <message fragment>
 expect_fail() {
   run "$1"
@@ -69,6 +73,12 @@ t "relativeUrl matching no route fails"
 expect_fail '{"frontend":{"setup":{"relativeUrl":"extensions/foo/none"}}}' \
   "(add { \"path\": \"extensions/foo/none\", \"scope\": \"admin\" })"
 
+t "blank manifest id fails"
+expect_fail '{"id":" ","frontend":{"setup":{"relativeUrl":"extensions/foo/setup"},'"$ROUTES"'}}' 'manifest id must be a non-blank string'
+
+t "missing remoteEntry fails"
+expect_fail '{"frontend":{"remote":{},"setup":{"relativeUrl":"extensions/foo/setup"},'"$ROUTES"'}}' 'frontend.remote.remoteEntry is required'
+
 t "non-string title fails"
 expect_fail '{"frontend":{"setup":{"relativeUrl":"extensions/foo/setup","title":7},'"$ROUTES"'}}' 'frontend.setup.title must be a string'
 
@@ -86,6 +96,7 @@ t "routes given as an object is rejected, no jq noise"
 expect_fail '{"frontend":{"setup":{"relativeUrl":"extensions/foo/setup"},"routes":{"k":{"path":"extensions/foo/setup","scope":"admin"}}}}' 'must match an admin-scoped route'
 
 t "routes given as an object prints no jq noise"
+run '{"frontend":{"setup":{"relativeUrl":"extensions/foo/setup"},"routes":{"k":{"path":"extensions/foo/setup","scope":"admin"}}}}'
 case "$ERR" in *jq:*) bad "jq noise: $ERR" ;; *) ok ;; esac
 
 t "frontend that is not an object is OK with no stderr"
@@ -105,6 +116,14 @@ run "$SETUP_OK"; [ "$RC" -eq 0 ] && [ -z "$ERR" ] && ok || bad "exit $RC: $ERR"
 
 t "double-quoted SETUP_PATH is OK"
 printf 'export const SETUP_PATH = "extensions/foo/setup";\n' > "$R"
+run "$SETUP_OK"; [ "$RC" -eq 0 ] && [ -z "$ERR" ] && ok || bad "exit $RC: $ERR"
+
+t "type-annotated SETUP_PATH is OK"
+printf "export const SETUP_PATH: string = 'extensions/foo/setup';\n" > "$R"
+run "$SETUP_OK"; [ "$RC" -eq 0 ] && [ -z "$ERR" ] && ok || bad "exit $RC: $ERR"
+
+t "backtick SETUP_PATH is OK"
+printf 'export const SETUP_PATH = `extensions/foo/setup`;\n' > "$R"
 run "$SETUP_OK"; [ "$RC" -eq 0 ] && [ -z "$ERR" ] && ok || bad "exit $RC: $ERR"
 
 t "SETUP_PATH different from relativeUrl fails and names the found value"
