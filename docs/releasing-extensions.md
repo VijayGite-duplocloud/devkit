@@ -1,6 +1,7 @@
 # Releasing extensions
 
-`.github/workflows/release.yml` runs on every push to `main` and on a manual dispatch. It calls
+`.github/workflows/release.yml` runs on every push to `main`, in DuploCloud's organizations on every push to `dev`
+and `rc` as well, and on a manual dispatch. It calls
 [duplocloud/actions/release-extension](https://github.com/duplocloud/actions/tree/main/release-extension), which
 builds every `extensions/*/manifest.json`, plus the single-extension layouts `extension/manifest.json` and
 `extension/*/manifest.json`, with `scripts/build-all.sh`, then signs each bundle, publishes one GitHub Release
@@ -39,10 +40,12 @@ DuploCloud beyond that key.
 
 ## Releasing from dev and RC
 
-A push to `main` releases to the prod console and the prod bucket. A push to `dev` or `rc` releases the same way to
-the non-prod side: the dev console at `https://dev-console.prod-apps.duplocloud.net` and the non-prod bundle bucket,
-which dev and RC portals install from through the dev license server. The run is the same action with a different
-console, different keys and a channel.
+A push to `main` releases to the prod console and the prod bucket. In DuploCloud's organizations a push to `dev` or
+`rc` releases the same way to the non-prod side: the dev console at `https://dev-console.prod-apps.duplocloud.net`
+and the non-prod bundle bucket, which dev and RC portals install from through the dev license server. The run is the
+same action with a different console, different keys and a channel. The repository variables `CONSOLE_DEV_URL` and
+`BUNDLE_BUCKET_NONPROD` override those two defaults, the way `CONSOLE_URL` and `BUNDLE_BUCKET` do on `main`. Outside
+DuploCloud's organizations a push to `dev` or `rc` runs nothing, since the console it would reach is DuploCloud's.
 
 The channel keeps the two sides apart on GitHub. A dev build is tagged `<slug>-dev-v<version>-sdk-<sdkVersion>` (an RC
 build `-rc-`) and its release is marked a prerelease, so it never takes the tag the main release of that version will
@@ -52,10 +55,10 @@ and says nothing about `main`.
 
 The dev console issues its own publisher keys, so the non-prod side has its own secrets. In DuploCloud's organizations
 a repository sets `CONSOLE_DEV_API_KEY` and `CONSOLE_DEV_SIGNING_KEY` as secrets and `CONSOLE_DEV_SIGNING_CERT` as a
-variable, beside the prod values. The ArmDot license is the same on both sides. The upload goes through a URL the dev
-console issues, not the publisher role, since the role's trust admits `main` alone. A repository outside DuploCloud's
-organizations that releases from `dev` or `rc` needs only `CONSOLE_DEV_API_KEY` and the same `CONSOLE_TEAM` variable,
-the way `main` needs `CONSOLE_API_KEY`.
+variable, beside the prod values. The ArmDot license and the release bot token are the same on both sides. The upload
+goes through a URL the dev console issues, not the publisher role, since the role's trust admits `main` alone. The
+signature travels in the console's artifact record, which is where a portal's installer reads it from, so the non-prod
+bucket holds the bundle alone.
 ## Releasing to your own portal
 
 This section is for a team outside DuploCloud's organizations. The same `release.yml` runs. What differs is
@@ -221,7 +224,8 @@ under that repository's review.
 ## The channels bucket and the license server
 
 In DuploCloud's organizations a signed build uploads to
-`s3://duplo-helpdesk-channels/bundles/[id]/[version]/sdk-[sdkVersion]/` in `us-west-2`, as two objects,
+`s3://duplo-helpdesk-channels/bundles/[id]/[version]/sdk-[sdkVersion]/` in `us-west-2`, as two objects on a push to
+`main`,
 `extension.zip` and `extension.zip.sig`, with the assumed role. Both the bucket name and the console URL can be
 overridden with the `BUNDLE_BUCKET` and `CONSOLE_URL` repository variables. Left unset, they default to the
 production bucket and the production console. Elsewhere the action asks the console for an upload URL with the
@@ -265,6 +269,6 @@ afterward. Once immutable releases are turned on for a repository, which this wo
 can be added to a release after it is cut. The action does not skip that release. It reads back the
 `extension.zip` alone and registers the build with an empty signature, as it does for any unsigned build.
 Outside DuploCloud's organizations it then uploads through the console-issued URL and the run ends clean. In
-DuploCloud's organizations the upload writes two objects through the publisher role, so the run fails at the
+DuploCloud's organizations a `main` release writes two objects through the publisher role, so the run fails at the
 `.sig` upload, after the unsigned build is registered. The way to a signed build is a new `manifest.version`,
 which cuts a new tag and a new release that does get signed.
