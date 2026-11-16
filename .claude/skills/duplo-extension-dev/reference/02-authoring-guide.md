@@ -371,11 +371,13 @@ settings once. `frontend.setup` points the portal at it:
   gate requires it on every plain controller. Precedent for a plain `[Authorize]` controller:
   `samples/admin-settings/backend/AdminSettingsReadController.cs`. Until the endpoint exists, the template's
   localStorage fallback keeps values in one browser only, and provisioning can't read them. Once it exists, delete
-  the fallback (the `catchError` branches, `FALLBACK_KEY`, the `local` note).
+  the fallback (the `catchError` branches, `FALLBACK_KEY`, the `local` note). The GET must then answer `{}` when
+  nothing is saved yet, not 404: without the fallback a 404 fails `load()` and leaves Save disabled.
 - **Existing settings route:** keep the old workspace route, with a guard that returns a `UrlTree` to
   `/ai/suite/admin/<relativeUrl>` (not `redirectTo`, which keeps the old URL so the setup mount check misses). The
   guard must not fire on the setup mount. Remove the old menu entries. Reference: the `settings` route in
-  duploai-issue-reporter's `extension.routes.ts` (setup check in `setup-mount.ts`).
+  duploai-issue-reporter's `extension.routes.ts` (setup check in `setup-mount.ts`; until it merges, both are on
+  [duploai-issue-reporter#23](https://github.com/duplocloud-internal/duploai-issue-reporter/pull/23)).
 
 #### Build check
 

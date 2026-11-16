@@ -300,7 +300,8 @@ in [02](reference/02-authoring-guide.md#frontendsetup).
      - **Old settings route:** keep it, with a guard that returns a `UrlTree` to
        `/ai/suite/admin/<relativeUrl>` (not `redirectTo`, which keeps the old URL so the setup mount check misses).
        The guard must not fire on the setup mount itself. Remove the old menu entries and buttons that linked to it.
-       Reference: the `settings` route in duploai-issue-reporter's `extension.routes.ts` (setup check in `setup-mount.ts`).
+       Reference: the `settings` route in duploai-issue-reporter's `extension.routes.ts` (setup check in `setup-mount.ts`;
+       until it merges, both are on [duploai-issue-reporter#23](https://github.com/duplocloud-internal/duploai-issue-reporter/pull/23)).
   3. No setup page → add it from the template. In the copied `settings.service.ts`, re-point the
      `REMOTE_DuploHttpClient` import to the agent's own service.
   - All three need `ng-common-lib` ≥ 0.8.0. Upgrade an older agent first
