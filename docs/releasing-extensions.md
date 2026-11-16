@@ -53,6 +53,12 @@ use, and a resumed run only ever reads back a release from its own channel. The 
 channel: a version released from `dev` whose extension then changes fails the `dev` run until `manifest.version` moves,
 and says nothing about `main`.
 
+The channels are separate on GitHub alone. `dev` and `rc` share the dev console, which holds one build per version and
+SDK, so a version that went through `dev` cannot go through `rc` unchanged: the `rc` run cuts its release and then fails
+at the console with "already holds a build for SDK x that differs from this release", since every run builds afresh and
+the bytes never match the build `dev` registered. A version reaches `rc` under its own `manifest.version`, one that
+`dev` never released.
+
 The dev console issues its own publisher keys, so the non-prod side has its own secrets. In DuploCloud's organizations
 a repository sets `CONSOLE_DEV_API_KEY` and `CONSOLE_DEV_SIGNING_KEY` as secrets and `CONSOLE_DEV_SIGNING_CERT` as a
 variable, beside the prod values. The ArmDot license and the release bot token are the same on both sides. The upload
