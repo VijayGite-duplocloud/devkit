@@ -11,7 +11,7 @@
 # with. Outside Duplo's organizations that key belongs to your console team, so set the repo variable CONSOLE_TEAM to
 # the team's slug as well; the action then uses the team's own routes. By default the build fetches the host SDK feed
 # from DUPLO_HOST, which must be reachable from CI (a public DuploCloud, not localhost), and releases the one bundle
-# that host loads. With the repo variable DUPLO_SDK_VERSIONS set (one version per line), the action builds one bundle
+# that host loads. With the repo variable DUPLO_SDK_VERSIONS set (comma-separated or one per line), the action builds one bundle
 # per listed SDK version from the package feed and cuts one release per bundle, since a host loads only a bundle whose
 # sdkVersion equals its own. This workflow still requires DUPLO_HOST and DUPLO_TOKEN either way: it forces
 # DUPLO_TARGET=remote and checks both before the build. Turn on immutable releases in the repository's settings, too;

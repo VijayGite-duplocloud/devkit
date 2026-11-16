@@ -137,7 +137,7 @@ DUPLO_SDK_VERSIONS=1.0.6,1.0.7 ./scripts/build-extension.sh samples/helloworld
 ls samples/helloworld/dist/sdk-*/extension.zip
 ```
 
-`DUPLO_SDK_VERSIONS` lists the versions, one per line. Each one is restored as the
+`DUPLO_SDK_VERSIONS` lists the versions, comma-separated or one per line. Each one is restored as the
 `Duplocloud.AiHelpdesk.Sdk` package at exactly that version from the `nuget.org` source in `backend/nuget.config`,
 so it has to be a version the feed publishes. The frontend is built once and the backend once per version, and
 each bundle lands at `dist/sdk-[version]/extension.zip` with that version stamped as its `sdkVersion`. Nothing is
