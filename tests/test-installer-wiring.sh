@@ -125,9 +125,9 @@ grep -q 'rotate_old_mongo_password' run.sh && ! grep -q 'MONGO_ROOT_PASSWORD=aut
 # answers `volume` by whether VOL is set, records `compose up` with the password it was given, and plays mongosh: a password is accepted when it
 # equals the one in the state file, and a changeUserPassword eval moves the state file to the value passed in
 # MONGO_NEW_PASSWORD. getenv, setenv, compose_project and sleep are stubbed around the functions under test.
-rotate_case() {  # rotate_case <VOL:0|1> <accepted password> [pending in .env]
+rotate_case() {  # rotate_case <VOL:0|1> <accepted password> [pending in .env] [unauthenticated pings that fail first]
   local d; d="$(mktemp -d)"; R_DIR="$d"
-  printf '%s\n' "$2" > "$d/pw"; : > "$d/calls"; : > "$d/env"
+  printf '%s\n' "$2" > "$d/pw"; : > "$d/calls"; : > "$d/env"; printf '%s\n' "${4:-0}" > "$d/slow"
   [ -n "${3:-}" ] && printf 'MONGO_ROOT_PASSWORD_PENDING=%s\n' "$3" > "$d/env"
   cat > "$d/rt" <<EOF
 #!/usr/bin/env bash
@@ -137,8 +137,12 @@ case "\$1 \$2" in
   "volume inspect") [ "$1" = 1 ] && [ "\$3" = devkit_mongo_data ] && exit 0; exit 1 ;;
   "compose up") echo "up-env:\${MONGO_ROOT_PASSWORD:-}" >> "$d/calls"; exit 0 ;;
   "compose exec")
-    pw=""; new=""; js=""
-    while [ \$# -gt 0 ]; do case "\$1" in -p) pw="\$2"; shift ;; -e) new="\${2#MONGO_NEW_PASSWORD=}"; shift ;; --eval) js="\$2"; shift ;; esac; shift; done
+    pw=""; new=""; js=""; auth=0
+    while [ \$# -gt 0 ]; do case "\$1" in -p) pw="\$2"; auth=1; shift ;; -e) new="\${2#MONGO_NEW_PASSWORD=}"; shift ;; --eval) js="\$2"; shift ;; esac; shift; done
+    if [ "\$auth" = 0 ]; then  # the unauthenticated ping: mongod is still starting while the slow count lasts
+      left=\$(cat "$d/slow"); echo "ping:\$left" >> "$d/calls"
+      [ "\$left" -gt 0 ] && { echo \$((left - 1)) > "$d/slow"; exit 1; }; exit 0
+    fi
     [ "\$pw" = "\$(cat "$d/pw")" ] || exit 1
     case "\$js" in *changeUserPassword*) printf '%s\n' "\$new" > "$d/pw"; echo "change:\$new" >> "$d/calls" ;; esac
     exit 0 ;;
@@ -150,7 +154,7 @@ EOF
     getenv() { grep -E "^$1=" "$ENV" 2>/dev/null | head -1 | cut -d= -f2- || true; }
     setenv() { grep -vE "^$1=" "$ENV" > "$ENV.n" 2>/dev/null || true; printf '%s=%s\n' "$1" "$2" >> "$ENV.n"; mv "$ENV.n" "$ENV"; }
     compose_project() { printf devkit; }; sleep() { :; }
-    eval "$(sed -n '/^MONGO_OLD_PASSWORD=/p; /^mongo_eval()/,/^}/p; /^rotate_old_mongo_password()/,/^}/p' run.sh)"
+    eval "$(sed -n '/^MONGO_OLD_PASSWORD=/p; /^mongo_eval()/,/^}/p; /^mongo_ping()/p; /^rotate_old_mongo_password()/,/^}/p' run.sh)"
     rotate_old_mongo_password ) >"$d/out" 2>"$d/err"
   R_RC=$?; R_ERR="$(cat "$d/err")"; R_CALLS="$(cat "$d/calls")"
   R_PW="$(grep -E '^MONGO_ROOT_PASSWORD=' "$d/env" | cut -d= -f2-)"; R_PENDING="$(grep -E '^MONGO_ROOT_PASSWORD_PENDING=' "$d/env" | cut -d= -f2-)"
@@ -188,22 +192,39 @@ rotate_case 1 somethingelse
 [ "$R_RC" -ne 0 ] && [ -z "$R_PW" ] && ! grep -q '^change:' <<<"$R_CALLS" && grep -qF -- '--reset' <<<"$R_ERR" \
   && ok || bad "rc=$R_RC pw=$R_PW calls=$R_CALLS $R_ERR"
 
+t "rotation: a slow mongo start is waited on, and no password is tried before mongod answers"
+rotate_case 1 authpass "" 40
+first_pw="$(grep -n -- ' -p ' <<<"$R_CALLS" | head -1 | cut -d: -f1)"; last_fail="$(grep -n '^ping:1$' <<<"$R_CALLS" | tail -1 | cut -d: -f1)"
+[ "$R_RC" -eq 0 ] && grep -qE '^change:[0-9a-f]{64}$' <<<"$R_CALLS" && [ -n "$first_pw" ] && [ -n "$last_fail" ] && [ "$first_pw" -gt "$last_fail" ] \
+  && ok || bad "rc=$R_RC first_pw=$first_pw last_fail=$last_fail $R_ERR"
+
+t "rotation: a mongo that never answers stops the run without naming --reset or touching the password"
+rotate_case 1 authpass "" 100000
+[ "$R_RC" -ne 0 ] && [ -z "$R_PW" ] && ! grep -q -- ' -p ' <<<"$R_CALLS" && ! grep -qF -- '--reset' <<<"$R_ERR" && grep -q 'did not answer' <<<"$R_ERR" \
+  && ok || bad "rc=$R_RC pw=$R_PW $R_ERR"
+
 t "rotation: a failed password change writes nothing to .env"
 d="$(mktemp -d)"; : > "$d/env"
 cat > "$d/rt" <<EOF
 #!/usr/bin/env bash
 case "\$1 \$2" in "volume ls"|"compose up") exit 0 ;; "volume inspect") exit 0 ;;
-  "compose exec") case "\$*" in *changeUserPassword*) exit 1 ;; *" -p authpass "*) exit 0 ;; esac; exit 1 ;; esac; exit 1
+  "compose exec") case "\$*" in *changeUserPassword*) exit 1 ;; *" -p "*) [[ "\$*" == *" -p authpass "* ]] && exit 0; exit 1 ;; *) exit 0 ;; esac ;; esac; exit 1
 EOF
 chmod +x "$d/rt"
 ( RUNTIME="$d/rt"; ENV="$d/env"
   getenv() { grep -E "^$1=" "$ENV" 2>/dev/null | head -1 | cut -d= -f2- || true; }
   setenv() { grep -vE "^$1=" "$ENV" > "$ENV.n" 2>/dev/null || true; printf '%s=%s\n' "$1" "$2" >> "$ENV.n"; mv "$ENV.n" "$ENV"; }
   compose_project() { printf devkit; }; sleep() { :; }
-  eval "$(sed -n '/^MONGO_OLD_PASSWORD=/p; /^mongo_eval()/,/^}/p; /^rotate_old_mongo_password()/,/^}/p' run.sh)"
+  eval "$(sed -n '/^MONGO_OLD_PASSWORD=/p; /^mongo_eval()/,/^}/p; /^mongo_ping()/p; /^rotate_old_mongo_password()/,/^}/p' run.sh)"
   rotate_old_mongo_password ) >/dev/null 2>"$d/err"
 rc=$?; [ "$rc" -ne 0 ] && ! grep -q '^MONGO_ROOT_PASSWORD=.' "$d/env" && grep -q '^MONGO_ROOT_PASSWORD_PENDING=.' "$d/env" \
+  && grep -q 'MONGO_ROOT_PASSWORD was not written' "$d/err" && ! grep -q 'nothing was written' "$d/err" \
   && ok || bad "rc=$rc $(cat "$d/env") $(cat "$d/err")"; rm -rf "$d"
+
+t "run.sh settles the mongo password after the pull and before the start"
+PULL="$(grep -n 'compose pull$' run.sh | head -1 | cut -d: -f1)"; ROT="$(grep -n '|| rotate_old_mongo_password$' run.sh | head -1 | cut -d: -f1)"
+UP="$(grep -n 'compose up -d$' run.sh | head -1 | cut -d: -f1)"
+if [ -n "$PULL" ] && [ -n "$ROT" ] && [ -n "$UP" ] && [ "$PULL" -lt "$ROT" ] && [ "$ROT" -lt "$UP" ]; then ok; else bad "pull=$PULL rotate=$ROT up=$UP"; fi
 
 t ".env.example lists MONGO_ROOT_PASSWORD with the stable secrets"
 grep -qE '^MONGO_ROOT_PASSWORD=$' .env.example && ok || bad ".env.example"

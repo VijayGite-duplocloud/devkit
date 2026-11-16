@@ -67,12 +67,14 @@ On an EC2 host the provider prompt first probes whether the instance role can ac
    [configuration.md § Licensing](configuration.md#licensing). This is where a run can wait on you: the
    license server emails the address a link, and the run polls for up to 2 minutes after it is clicked.
 6. Resolves password and LLM provider: flag, then `.env`, then prompt.
-7. Generates `Encryption__MasterKey`, `Authentication__JwtSharedSecret`, `MONGO_ROOT_PASSWORD` and `Agent__ApiAuthToken`
-   once, if unset. A data volume initialised before the mongo key existed still answers to the old fixed password, so
-   the run starts mongo alone, changes the root password to the generated value, and writes it to `.env` only once the
-   database has taken it. A run that stops between the two steps finishes the rotation next time with the same
-   value. A database that answers to neither password stops the run and names `--reset`.
-8. `docker compose pull`, then `docker compose up -d`.
+7. Generates `Encryption__MasterKey`, `Authentication__JwtSharedSecret` and `Agent__ApiAuthToken` once, if unset.
+8. `docker compose pull`, then settles `MONGO_ROOT_PASSWORD`, generated once if unset. A data volume initialised
+   before the mongo key existed still answers to the old fixed password, so the run starts mongo alone, waits for it to
+   answer, changes the root password to the generated value, and writes it to `.env` only once the database has taken
+   it. A run that stops between the two steps finishes the rotation next time with the same value. A database that
+   answers to neither password stops the run and names `--reset`. This sits after the pull and every prompt so a
+   studio still running from before the upgrade keeps a working password until the next step recreates it.
+   Then `docker compose up -d`.
 9. Waits up to ~4.5 minutes for the studio to answer on `/healthz` — an anonymous route, because this
    happens before the admin token exists.
 10. Mints a permanent admin API token into `DUPLO_ADMIN_TOKEN`, revoking its own prior `dev-kit-admin`

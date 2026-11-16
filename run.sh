@@ -226,6 +226,8 @@ mongo_eval() {
   local pw="$1" js="$2"; shift 2
   "$RUNTIME" compose exec -T "$@" mongo mongosh --quiet -u authuser -p "$pw" --authenticationDatabase admin --eval "$js" >/dev/null 2>&1
 }
+# ping needs no credentials, so this tells a mongod that is still starting apart from one that refuses a password.
+mongo_ping() { "$RUNTIME" compose exec -T mongo mongosh --quiet --eval 'db.adminCommand({ping:1})' >/dev/null 2>&1; }
 rotate_old_mongo_password() {
   local err pending answers="" i
   if ! err="$("$RUNTIME" volume ls -q 2>&1 >/dev/null)"; then
@@ -242,17 +244,24 @@ rotate_old_mongo_password() {
   # new one from .env.
   MONGO_ROOT_PASSWORD="$MONGO_OLD_PASSWORD" "$RUNTIME" compose up -d mongo >/dev/null 2>&1 \
     || { echo "  ✖ $RUNTIME could not start mongo to rotate its password." >&2; exit 1; }
-  for i in $(seq 1 30); do
-    if mongo_eval "$pending" 'db.adminCommand({ping:1})'; then answers=pending; break; fi
-    if mongo_eval "$MONGO_OLD_PASSWORD" 'db.adminCommand({ping:1})'; then answers=old; break; fi
-    sleep 2
-  done
+  # Wait for mongod itself first. A large volume replaying on a slow disk can take minutes, and a password tried
+  # before mongod listens looks the same as a wrong one.
+  for i in $(seq 1 300); do mongo_ping && break; sleep 2; done
+  if ! mongo_ping; then
+    echo "  ✖ MongoDB did not answer within 10 minutes of starting. Its data is untouched; see '$RUNTIME compose logs mongo'" >&2
+    echo "    and re-run once it comes up." >&2
+    exit 1
+  fi
+  if mongo_eval "$pending" 'db.adminCommand({ping:1})'; then answers=pending
+  elif mongo_eval "$MONGO_OLD_PASSWORD" 'db.adminCommand({ping:1})'; then answers=old
+  fi
   case "$answers" in
     pending) ;;   # an earlier run changed it and stopped before writing .env
     old) mongo_eval "$MONGO_OLD_PASSWORD" 'db.getSiblingDB("admin").changeUserPassword("authuser", process.env.MONGO_NEW_PASSWORD)' \
            -e "MONGO_NEW_PASSWORD=$pending" \
-           || { echo "  ✖ Changing MongoDB's root password failed. The old password still applies and nothing was written to .env." >&2; exit 1; } ;;
-    *) echo "  ✖ MongoDB answered to neither the old fixed root password nor the pending one within 60 seconds." >&2
+           || { echo "  ✖ Changing MongoDB's root password failed. The old password still applies and MONGO_ROOT_PASSWORD was not written;" >&2
+                echo "    MONGO_ROOT_PASSWORD_PENDING in .env holds the value the next run applies." >&2; exit 1; } ;;
+    *) echo "  ✖ MongoDB answered to neither the old fixed root password nor the pending one." >&2
        echo "    If its root password was changed by hand, set MONGO_ROOT_PASSWORD in .env to it. Otherwise run" >&2
        echo "    ./run.sh --reset to recreate the database with a generated password." >&2
        exit 1 ;;
@@ -1082,8 +1091,6 @@ setenv AIStudio__IsMasterDisabled true
 # embedded mid-key, which rendered as a wrapped line in .env and failed the backend's key validation.
 [ -n "$(getenv Encryption__MasterKey)" ] || setenv Encryption__MasterKey "$(openssl rand -base64 96 | tr -d '\r\n')"
 [ -n "$(getenv Authentication__JwtSharedSecret)" ] || setenv Authentication__JwtSharedSecret "$(openssl rand -hex 32)"
-[ -n "$(getenv MONGO_ROOT_PASSWORD)" ] || rotate_old_mongo_password
-[ -n "$(getenv MONGO_ROOT_PASSWORD)" ] || setenv MONGO_ROOT_PASSWORD "$(openssl rand -hex 32)"
 # The studio sends this as a bearer on every agent call and the agent rejects any call without it. Both read .env.
 [ -n "$(getenv Agent__ApiAuthToken)" ] || setenv Agent__ApiAuthToken "$(openssl rand -hex 32)"
 
@@ -1178,6 +1185,10 @@ done
 # so on a box with both installed the choice is otherwise invisible until it goes wrong.
 echo "==> Using $(runtime_label)"
 echo "==> Pulling images…"; "$RUNTIME" compose pull
+# The mongo password is settled here, after the pull and every prompt, so a studio already running from before the
+# upgrade keeps a password that works until the start below recreates it with the new one.
+[ -n "$(getenv MONGO_ROOT_PASSWORD)" ] || rotate_old_mongo_password
+[ -n "$(getenv MONGO_ROOT_PASSWORD)" ] || setenv MONGO_ROOT_PASSWORD "$(openssl rand -hex 32)"
 # The installer mounts extensions/. A bind source the runtime has to create comes out root-owned under rootful docker
 # on Linux, which neither fetch-terraform-extension.sh below nor a build could then write.
 mkdir -p extensions
