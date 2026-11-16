@@ -37,6 +37,63 @@ bundle is plain, signed only when the repository supplies its own key and certif
 through a URL the console issues for the console key, so a customer's repository needs nothing from
 DuploCloud beyond that key.
 
+## Releasing to your own portal
+
+This section is for a team outside DuploCloud's organizations. The same `release.yml` runs. What differs is
+what the team sets up in the console and which secrets and variables the repository holds. Nothing in it
+needs a DuploCloud credential.
+
+### What you need from the console
+
+1. **A key for your team.** In your console team, create a custom role holding **View own agents** and
+   **Manage own agent versions**, create a service account with that role, and store its API key as the
+   repository secret `CONSOLE_API_KEY`. The first is what lets the action find the extension, since every
+   read on your team's routes needs it. The second creates versions and artifacts and asks for upload URLs.
+   The console's Service Accounts guide has the workflow. Then set the repository variable `CONSOLE_TEAM`
+   to your team's slug, the segment after `/a/` in the console's address bar. `release.yml` passes it to
+   the action, which then uses your team's own routes. Without it the run stops before the build and names
+   the variable, since the routes the action would use otherwise need a staff capability no customer key
+   holds.
+2. **One agent record per extension.** Under **Agents > Agents**, create an agent whose manifest id equals
+   the `id` in the extension's `manifest.json`. The id has to fall inside one of your team's namespaces,
+   which the same page lists. By default that is the reverse of your domain, so a team on `acme.io` names
+   its extensions `io.acme.billing` and so on. Creating the record takes **Manage own agents**. The action
+   finds the record by that id and fails the job when none exists.
+3. **A signing key, if you sign.** Under **Agents > Signing keys > New signing key**, the console shows the
+   key's private PEM once. That is the repository secret `CONSOLE_SIGNING_KEY`. The key's certificate,
+   which the key list offers to copy at any time, is the repository variable `CONSOLE_SIGNING_CERT`. Set
+   both or neither. With both, every build is signed as described under "Signing a build". With neither, the
+   build ships plain and unsigned, and the run still completes.
+
+The build itself still takes its SDK from a running platform, so the repository also holds `DUPLO_HOST`
+and `DUPLO_TOKEN`, the same secrets Extension CI uses.
+
+### What each run produces
+
+A push to `main` builds every extension, cuts one GitHub Release per build, tagged
+`<slug>-v<version>-sdk-<sdkVersion>` with `extension.zip` attached (and `extension.zip.sig` when the
+repository signs), and registers the build with the console as a new, unpublished version of your agent
+record. The upload goes through a URL the console issues for your key, valid for 900 seconds and good for
+one create-only write, so the run never holds AWS credentials and never names a bucket. A build already
+there is reported as registered rather than replaced.
+
+### Where it shows up
+
+Your team's agents are private. Only your team sees them in the console, and only portals licensed to your
+team see them in their **Agent Library**. A version appears there once it is published. Publish it from
+the console, by editing the version, or start the Extension Release workflow by hand with its `publish`
+input checked, which publishes each version that run registers a first build for. A version an earlier run
+registered is published in the console.
+
+### What a customer build does not get
+
+- **Obfuscation.** The ArmDot license is DuploCloud's, so a customer build ships its backend assembly
+  plain. The release checks accept that outside DuploCloud's organizations.
+- **A signature check on install, today.** The console verifies a signature when the artifact is registered
+  and shows it on the version. The portal's own check at install time arrives with a coming platform
+  release. Until then an unsigned bundle installs, and a signed one is not yet refused for a bad signature
+  at that step.
+
 ## Signing a build
 
 Any repository, not only DuploCloud's own, can sign a build with `.github/actions/extension-sign`, a

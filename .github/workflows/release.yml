@@ -9,8 +9,9 @@
 # This file ships with the dev-kit. After scripts/init-project.sh makes the repo yours, set these repo secrets
 # (same as Extension CI): DUPLO_HOST + DUPLO_TOKEN, since the build fetches the host SDK feed from DUPLO_HOST, which
 # must be reachable from CI (a public DuploCloud, not localhost), and CONSOLE_API_KEY, the console key the action
-# registers versions with. Turn on immutable releases in the repository's settings, too; the action warns on every
-# release that lands mutable.
+# registers versions with. Outside Duplo's organizations that key belongs to your console team, so set the repo
+# variable CONSOLE_TEAM to the team's slug as well; the action then uses the team's own routes. Turn on immutable
+# releases in the repository's settings, too; the action warns on every release that lands mutable.
 #
 # In Duplo's own organizations (duplocloud, duplocloud-internal) the action also requires the signing key, the
 # certificate and the ArmDot license, mapped below from the org secrets CONSOLE_SIGNING_KEY and ARMDOT_LICENSE_KEY and
@@ -63,8 +64,11 @@ jobs:
       - name: Discover extensions
         id: guard
         run: |
+          # extension/manifest.json has no wildcard, so nullglob would keep it as a literal and the list would never
+          # be empty. Count it only when the file exists.
           shopt -s nullglob
-          dirs=(extensions/*/manifest.json extension/*/manifest.json extension/manifest.json)
+          dirs=(extensions/*/manifest.json extension/*/manifest.json)
+          [ -f extension/manifest.json ] && dirs+=(extension/manifest.json)
           if [ ${#dirs[@]} -gt 0 ]; then echo "build=true" >> "$GITHUB_OUTPUT"
           else echo "build=false" >> "$GITHUB_OUTPUT"; echo "::notice::No extensions/*/manifest.json — nothing to release."; fi
 
@@ -79,6 +83,7 @@ jobs:
           CONSOLE_SIGNING_CERT: ${{ vars.CONSOLE_SIGNING_CERT }}
           ARMDOT_LICENSE_KEY: ${{ secrets.ARMDOT_LICENSE_KEY }}
           EXTENSION_PUBLISHER_ROLE_ARN: ${{ vars.EXTENSION_PUBLISHER_ROLE_ARN }}
+          CONSOLE_TEAM: ${{ vars.CONSOLE_TEAM }}
         run: |
           missing=()
           for v in DUPLO_HOST DUPLO_TOKEN CONSOLE_API_KEY; do [ -n "${!v:-}" ] || missing+=("$v"); done
@@ -87,11 +92,13 @@ jobs:
               for v in CONSOLE_SIGNING_KEY CONSOLE_SIGNING_CERT ARMDOT_LICENSE_KEY EXTENSION_PUBLISHER_ROLE_ARN; do
                 [ -n "${!v:-}" ] || missing+=("$v")
               done ;;
+            *) [ -n "${CONSOLE_TEAM:-}" ] || missing+=(CONSOLE_TEAM) ;;
           esac
           [ ${#missing[@]} -eq 0 ] && exit 0
           echo "::error::This release needs ${missing[*]} set as repository or organization secrets and variables. The" \
-            "DUPLO_* secrets name the host the build takes its SDK from, CONSOLE_API_KEY registers the version, and in" \
-            "DuploCloud's organizations the signing, license and role values are required. See docs/releasing-extensions.md."
+            "DUPLO_* secrets name the host the build takes its SDK from, CONSOLE_API_KEY registers the version, CONSOLE_TEAM" \
+            "names the console team that key belongs to outside DuploCloud's organizations, and in those organizations the" \
+            "signing, license and role values are required. See docs/releasing-extensions.md."
           exit 1
 
       # Only Duplo's organizations hold the role, and only the repositories its trust list names can assume it, so a
@@ -110,8 +117,13 @@ jobs:
         with:
           console-api-key: ${{ secrets.CONSOLE_API_KEY }}
           console-url: ${{ vars.CONSOLE_URL || 'https://console.duplocloud.com' }}
+          console-team: ${{ vars.CONSOLE_TEAM }}
           signing-key: ${{ secrets.CONSOLE_SIGNING_KEY }}
           signing-cert: ${{ vars.CONSOLE_SIGNING_CERT }}
           armdot-license: ${{ secrets.ARMDOT_LICENSE_KEY }}
           bundle-bucket: ${{ vars.BUNDLE_BUCKET || 'duplo-helpdesk-channels' }}
+          # SDK versions to build against from the package feed, one per line, one bundle and one release per version.
+          # The action exports them to the build as DUPLO_SDK_VERSIONS, so a job env of that name would be overwritten.
+          # Empty builds one bundle from the host's SDK.
+          sdk-versions: ${{ vars.DUPLO_SDK_VERSIONS }}
           publish: ${{ inputs.publish || false }}

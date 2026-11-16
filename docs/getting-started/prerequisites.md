@@ -157,7 +157,7 @@ can run *alongside* a full local DuploCloud platform.
 | `4210` | Portal UI — `http://localhost:4210` |
 | `60031` | Studio API — `http://localhost:60031` |
 | `27018` | MongoDB, on `127.0.0.1` only |
-| `6061` | In-browser terminal (xterm) |
+| `6061` | In-browser terminal (xterm), on `127.0.0.1` only |
 
 If something on your machine already holds one of them, you do not need to free it — change the matching
 `*_PORT` in `.env` on the next page instead. The variables, and the trap in *blanking* one rather than
