@@ -219,14 +219,17 @@ extensions release already have them.
    manifest id equals the `id` in `manifest.json`, under the publishing team, with its categories, status and
    access set. Creating it takes a platform owner. The action finds the record by that id and fails the job
    when none exists.
-3. **Upgrade the devkit.** Run `./scripts/upgrade_dev_kit.sh --version <ref>` from the repository root, where
-   `<ref>` is the devkit branch or tag that carries the action-based `release.yml` (see
-   [upgrading.md](upgrading.md)). The upgrade replaces `.github/`, `scripts/` and `build/` wholesale, so it
-   brings the new workflow, removes `extension-publishers.json`, and refreshes `build-extension.sh` and the
-   builder image. Your extensions, their project files and your own docs are untouched. Open the pull request
-   and let Extension CI run; it builds the bundle the way the release will. Merge to `main`, and the release
-   job cuts one GitHub Release per build, uploads it and registers it as an unpublished version on the console
-   record. A platform owner publishes the version once it is checked.
+3. **Upgrade the devkit.** Run `./scripts/upgrade_dev_kit.sh --version dev` from the repository root. The
+   action-based `release.yml` is on devkit's `dev` branch; `main`, the script's default, still carries the
+   earlier workflow until `dev` is promoted, after which the default is enough (see
+   [upgrading.md](upgrading.md)). The upgrade replaces `.github/` and `scripts/` wholesale, so it brings the
+   new workflow, removes `extension-publishers.json` and refreshes `build-extension.sh`, and it overwrites the
+   framework's files in `build/` while leaving any of your own there. Your extensions, their project files and
+   your own docs are untouched. Open the pull request and let Extension CI run; it builds the bundle the way
+   the release will. Merge to `main`, and the release job cuts one GitHub Release per build, uploads it and
+   registers it as an unpublished version on the console record. The job's log ends with how many builds it
+   released, resumed and failed, with each release's URL above that line, and the repository's Releases page
+   lists them. A platform owner publishes the version once it is checked.
 
 ### What the release team does once per repository
 
@@ -246,10 +249,18 @@ the flow needs both, and the release job says which is missing before the build.
 
 ### The host's SDK line
 
-A host on extension SDK 1.2 or later ships `net10.0` reference assemblies only, and the build picks the target
-framework from the host's SDK version, so a repository pointed at such a host builds `net10.0` without a
-project-file change, and a `net8.0` build for an older host still loads on both. A builder image that still
-ships the .NET 8 SDK fails that build with NETSDK1045; the upgrade in step 3 brings the image that does not.
+A host on extension SDK 1.2 or later ships `net10.0` reference assemblies only. Today the devkit still builds
+for `net8.0`: the SDK baseline project `build-extension.sh` writes, the sample project files and the builder
+image in `build/Dockerfile.builder`, which ships the .NET 8 SDK, all say so, and a repository pointed at a 1.2
+host fails its build with NETSDK1045. [devkit#78](https://github.com/duplocloud/devkit/pull/78) is the change
+that moves it: the build picks the target framework from the host's SDK version and passes it to restore and
+publish, so a project file that names `net8.0` builds `net10.0` against a 1.2 host without an edit, the
+baseline project follows the same rule, and the builder image moves to the .NET 10 SDK, which still builds
+`net8.0` for a host on 1.0 or 1.1. Once it is on the branch you upgrade from, step 3 brings it. Until then a
+repository that has to build against a 1.2 host needs the two changes itself: `<TargetFramework>` set to
+`net10.0` (or chosen by a condition on `DuploSdkVersion`, the way the Cost Intelligence extension does it) in
+its project file, and `build/Dockerfile.builder` on `mcr.microsoft.com/dotnet/sdk:10.0-noble`, built locally
+and named through `BUILDER_IMAGE` since the shared image on quay.io is still the .NET 8 one.
 
 ## The channels bucket and the license server
 
