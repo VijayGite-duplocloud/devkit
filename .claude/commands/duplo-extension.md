@@ -19,7 +19,9 @@ creation) and writes many files — approving each one is tedious. To avoid a st
    - **Technical details** — the Spec and Result field tables, workspace or admin per resource, the provisioning
      mode, the lifecycle phases and Result tabs (`.claude/skills/duplo-extension-dev/reference/19-detail-page.md`),
      and access control: each resource's place in the permission tree and any endpoint that needs its own grant
-     (`.claude/skills/duplo-extension-dev/reference/18-access-control.md`).
+     (`.claude/skills/duplo-extension-dev/reference/18-access-control.md`), and the setup page: one connection per
+     provider the agent uses, plus its settings (`.claude/skills/duplo-extension-dev/reference/02-authoring-guide.md`
+     → `frontend.setup`).
 
    Then list the files you'll create under `extensions/<name>/` and the exact build/deploy commands. In the
    `ExitPlanMode` call, declare the Bash permissions the build needs via `allowedPrompts` so the user approves the
@@ -115,8 +117,8 @@ The Admin Workspace starts with none. So, if provisioning needs credentials:
 2. List its scopes with the script below. If a needed provider scope is missing, list all of them
    (`GET <base>/v1/aiservicedesk/admin/data/scopes`), carry the connection question to Step 4's batch, and — once the user picks one —
    **attach** it to the Admin Workspace: `GET …/admin/data/workspaces/<WS>`, then `PUT` it back with the ids
-   appended to `scopeIds` (`.claude/skills/duplo-extension-dev/reference/07-scope-credentials.md` → "Registering the
-   provider", step 3).
+   appended to `scopeIds` (`.claude/skills/duplo-extension-dev/reference/07-scope-credentials.md` → "Creating the
+   connection — the connections kit", step 3).
 3. The resource's `spec.scopeIds` must be a subset of the Admin Workspace's `scopeIds`; its add form offers only
    those.
 

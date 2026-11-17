@@ -2,7 +2,7 @@
 # Build an extension into <dir>/dist/extension.zip, against the locally-running platform's SDK feed.
 # Mirrors the duplo-extension-dev skill (fetch SDK → dotnet publish → npm build → zip).
 #
-# The build runs inside the builder container (.NET SDK 8 + Node 22) so Docker Compose is the only
+# The build runs inside the builder container (.NET SDK 10 + Node 22) so Docker Compose is the only
 # prerequisite. Pass --native, or set DUPLO_BUILD_NATIVE=1, to use a toolchain you installed yourself.
 # A build already running inside a container (e.g. the agent's) stays native automatically — see
 # scripts/_builder.sh.
@@ -144,6 +144,8 @@ while IFS=$'\t' read -r u sc; do
 done < <(jq -r '(.frontend.routes // []) as $r | .frontend.menus // [] | .[] | (.scope // "workspace") as $s
   | [.. | objects | .relativeUrl? // empty] | .[] as $u
   | select(([$r[] | select(.path == $u) | (.scope // "workspace")] | index($s)) == null) | "\($u)\t\($s)"' "$MANIFEST")
+# frontend.setup feeds the portal's "Agent Setup" nav; the portal silently ignores an invalid entry.
+scripts/validate-setup.sh "$MANIFEST" || viol=1   # cwd is the repo root (cd above)
 # A plain controller (ControllerBase/Controller, e.g. a read-only workspace view of an admin resource) gets no
 # authorization unless it says so: the host has no fallback policy, and only [Authorize] runs the tenant policy
 # (workspace membership; Admin Workspace grants on /aiservicedesk/admin). Resource controllers inherit it from their base.
@@ -195,11 +197,14 @@ case "$DIR" in
   *samples/*|*templates/*) ;;
   *)
     if [ -d "$DIR/frontend/src" ]; then
-      hits=$(grep -rnE 'HelloService|HelloWorld|hw-(add|list|view|root)|hello\.service' "$DIR/frontend/src" 2>/dev/null || true)
+      hits=$(grep -rnE 'HelloService|HelloWorld|Hello World|hw-(add|list|view|root|setup)|hello\.service|HELLO_WORLD_TYPE|HelloSettings|helloworld[./]settings|type:[[:space:]]*['"'"'"]helloworld['"'"'"]' "$DIR/frontend/src" 2>/dev/null || true)
       if [ -n "$hits" ]; then
         echo "  ✗ frontend still has template 'Hello'/'hw-' identifiers — rename them to your resource:" >&2
         printf '%s\n' "$hits" | head -8 | sed 's/^/      /' >&2; viol=1
       fi
+    fi
+    if [ "$(jq -r '(.frontend.setup.relativeUrl)? // empty' "$MANIFEST" 2>/dev/null)" = "extensions/helloworld-setup" ]; then
+      echo "  ✗ frontend.setup.relativeUrl is still the template's 'extensions/helloworld-setup' — use extensions/<idName>-setup (reference/02-authoring-guide.md)" >&2; viol=1
     fi ;;
 esac
 
@@ -220,6 +225,34 @@ SDK_VERSIONS=()
 for v in $(printf '%s' "${DUPLO_SDK_VERSIONS:-}" | tr ',' ' '); do
   [ -n "$v" ] && SDK_VERSIONS+=("$v")
 done
+
+# The SDK's reference assemblies fix the runtime an extension has to target: 1.2.0 moved the host to .NET 10, and an
+# assembly built for net10.0 does not load on a .NET 8 host, while one built for net8.0 loads on both. The target
+# framework therefore follows the SDK version rather than the csproj, so one checkout builds for whichever host it
+# points at, and the installer, which matches a build to a host by SDK version, only ever hands a host a build it
+# can load. A prerelease suffix is ignored, and the parts compare as numbers, so 1.10 sorts after 1.2.
+target_framework_for() {
+  local v="${1%%-*}" major minor
+  major="${v%%.*}"; minor="${v#*.}"; minor="${minor%%.*}"
+  if [ "${major:-0}" -gt 1 ] 2>/dev/null || { [ "${major:-0}" -eq 1 ] && [ "${minor:-0}" -ge 2 ]; } 2>/dev/null; then
+    echo net10.0
+  else
+    echo net8.0
+  fi
+}
+# An older SDK cannot build a newer framework, and the failure it gives is a NETSDK error deep in the publish. The
+# pinned toolchain image moves in a reviewed change, so a build that needs more than it ships says so up front.
+require_dotnet_for() {
+  local tfm="$1" sdk_ver="$2" need have
+  need="${tfm#net}"; need="${need%%.*}"
+  have="$(dotnet --version 2>/dev/null | cut -d. -f1)"
+  if [ -n "$have" ] && [ "$have" -lt "$need" ] 2>/dev/null; then
+    echo "ERROR: SDK $sdk_ver needs a $tfm build, which needs .NET SDK $need, and this toolchain is .NET SDK $have." >&2
+    echo "       In the builder container, set BUILDER_IMAGE to a toolchain that ships .NET SDK $need, or build the one in" >&2
+    echo "       build/Dockerfile.builder. With --native, install .NET SDK $need." >&2
+    exit 1
+  fi
+}
 
 CSPROJ=$(find "$DIR/backend" -maxdepth 1 -name '*.csproj' | head -1)
 [ -n "$CSPROJ" ] || { echo "No .csproj under $DIR/backend" >&2; exit 1; }
@@ -343,10 +376,21 @@ build_one() {
   case "$out" in /*) ;; *) out="$PWD/$out" ;; esac
   rm -rf "$out"; mkdir -p "$out"
 
+  local tfm; tfm="$(target_framework_for "$sdk_ver")"
+  echo "    [$sdk_ver] target framework: $tfm"
+  require_dotnet_for "$tfm" "$sdk_ver"
+
   [ "$OBFUSCATE" = 1 ] && echo "==> [$sdk_ver] Obfuscating the extension assembly with ArmDot $ARMDOT_VERSION"
   echo "==> [$sdk_ver] Building backend ($(basename "$CSPROJ"))"
-  ( cd "$DIR/backend" && dotnet publish "$(basename "$CSPROJ")" -c Release -o "$out/backend" -p:DuploSdkVersion="$sdk_ver" \
-      "${OBFUSCATE_PROPS[@]}" )
+  # The framework is passed as a property so no csproj changes when the host moves. A property given to dotnet publish
+  # does not reach the restore it runs first, which then resolves the csproj's own framework and the publish fails
+  # with NETSDK1005, so restore runs on its own with the same properties and publish skips its own. The obfuscation
+  # properties go to the restore too: they are what makes Directory.Build.targets import the ArmDot packages, and a
+  # publish that skips its own restore can only load what the restore resolved.
+  ( cd "$DIR/backend" && dotnet restore "$(basename "$CSPROJ")" -p:TargetFramework="$tfm" -p:DuploSdkVersion="$sdk_ver" \
+      "${OBFUSCATE_PROPS[@]}" \
+      && dotnet publish "$(basename "$CSPROJ")" --no-restore -c Release -o "$out/backend" -p:TargetFramework="$tfm" \
+           -p:DuploSdkVersion="$sdk_ver" "${OBFUSCATE_PROPS[@]}" )
 
   # The extension is hot-loaded into a child AssemblyLoadContext that serves the whole SDK closure from the host's
   # Default context, so those DLLs must not ship in the bundle (they only bloat it past the ingress limit). Compute
@@ -356,7 +400,7 @@ build_one() {
   cat > "$BASELINE/_sdkbaseline.csproj" <<CSPROJ_EOF
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>$tfm</TargetFramework>
     <UseAppHost>false</UseAppHost>
   </PropertyGroup>
   <ItemGroup>
