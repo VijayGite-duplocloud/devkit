@@ -93,10 +93,9 @@ Lead with the requirement and **listen** — do not interrogate with a checklist
   already live here (a shared repo — other developers' work), let the requirement decide: MODIFY an existing
   `extensions/<name>/` or scaffold a NEW `extensions/<name2>/`; ask when it's ambiguous. Before scaffolding new,
   read a sibling extension to match its conventions.
-- **Then propose a name** per the Name row of the skill's
-  [Talking to the user](../skills/duplo-extension-dev/SKILL.md#talking-to-the-user): one plain name for the user to
-  confirm. Derive the extension id, the resource type(s) and the federation remote name from it yourself; do not
-  ask for a name before hearing the requirement. In a shared repo the name — and the frontend's federation remote
+- **Then derive a name**: one plain name, which Step 4's batch asks the user to keep or change (the Name row of the
+  skill's [Talking to the user](../skills/duplo-extension-dev/SKILL.md#talking-to-the-user)). Derive the extension id,
+  the resource type(s) and the federation remote name from it yourself. In a shared repo the name — and the frontend's federation remote
   `name` — must collide with no sibling extension.
 
 ## Step 3 — Where it lives, then the connections to test with
@@ -114,8 +113,8 @@ The Admin Workspace starts with none. So, if provisioning needs credentials:
 1. Use the **Admin Workspace** as `WS` in the listing below: the SDK constant
    `Workspace.AdminWorkspaceId`.
 2. List its scopes with the script below. If a needed provider scope is missing, list all of them
-   (`GET <base>/v1/aiservicedesk/admin/data/scopes`), ask which one(s) to use, and — with the user's OK —
-   **attach** them to the Admin Workspace: `GET …/admin/data/workspaces/<WS>`, then `PUT` it back with the ids
+   (`GET <base>/v1/aiservicedesk/admin/data/scopes`), carry the connection question to Step 4's batch, and — once the user picks one —
+   **attach** it to the Admin Workspace: `GET …/admin/data/workspaces/<WS>`, then `PUT` it back with the ids
    appended to `scopeIds` (`.claude/skills/duplo-extension-dev/reference/07-scope-credentials.md` → "Registering the
    provider", step 3).
 3. The resource's `spec.scopeIds` must be a subset of the Admin Workspace's `scopeIds`; its add form offers only
@@ -157,8 +156,8 @@ except urllib.error.HTTPError as e:
     print("Could not list scopes:", e.code, e.read().decode()[:200])
 PY
 ```
-Show the list by name and ask the Provider scopes row's plain question: *"To test this I need to reach
-<system>. Which saved connection should I use?"*, plus "it doesn't need one". Record the chosen `scopeId`(s) — they
+Keep the list for Step 4's batch, which asks for the connection with these names as the options. Do not ask it
+here. Record the chosen `scopeId`(s) — they
 become the resource spec's `ScopeIds` when you create a test resource, and the provisioning skill reads that
 scope's credentials from `other_scopes/<name>.json` (see
 `.claude/skills/duplo-extension-dev/reference/07-scope-credentials.md`). If the target system isn't registered
@@ -168,7 +167,8 @@ yet, help the user create a provider (`type: "other"`, `category: other`) + scop
 Turn the template answers into the skill's Phase 1 checklist: **section 2 → the Spec fields, section 4 → the Result
 fields, section 3 → the provisioning mode** (derive per Phase 1; never default to Agent). Then ask the one batch that
 the skill's [Talking to the user](../skills/duplo-extension-dev/SKILL.md#talking-to-the-user) defines, in the user's
-words, and wait. The archetype is always typed (C# backend + Angular remote + provisioning skill): never ask about
+words, and wait. It carries the name from Step 2 and the saved connection from Step 3 (*"To test this I need to reach <system>. Which
+saved connection should I use?"*, the listed names plus "it doesn't need one"), so the user answers once. The archetype is always typed (C# backend + Angular remote + provisioning skill): never ask about
 it. Ask AI is opt-in: never offer it unprompted.
 
 **Do not write code until the plan is approved.**

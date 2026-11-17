@@ -110,10 +110,13 @@ The user approves the summary before any code is written, on both paths:
 
 - **Local:** the summary is the plan approved through `ExitPlanMode`, as today.
 - **Product:** after the batch of answers, the agent posts `Blocked` with `subStatus` `Needs more details`
-  and a one-line `blockedReason` ("Review what I'll build"), then one `ask_human` single-select holding
-  the summary: **Build it** or **Change something**. **Build it** → post `Processing` / `Authoring code`
-  and continue. **Change something** → the user's words revise the summary, and the agent asks again.
-  The bootstrap already supports this ask, so the pause is a devkit change.
+  and a one-line `blockedReason` ("Review what I'll build"), then one `ask_human` `yes_no` question: the
+  summary, ending "Build this?". **Yes** → post `Processing` / `Authoring code` and continue. Any other
+  reply (the platform's own "Chat about this" row included) is the change request: the agent revises the
+  summary and repeats the pause, `Blocked` POST first. The agent adds no options of its own, as the
+  bootstrap requires. The shape matches the bootstrap's load approval, so the pause is a devkit change.
+- **Product, three guesses only:** when the batch would hold only the Name, Spec fields and Result fields
+  guesses, it is skipped and they ride the pause; the summary names the extension.
 
 ## Where it lives
 
@@ -121,7 +124,7 @@ The user approves the summary before any code is written, on both paths:
   question table, the four-pattern table and the summary shape. The settle-list above it keeps its
   technical wording; it is the agent's checklist.
 - Phase 1's in-platform "how to ask" defers to the bootstrap's `ask_human` protocol, its example
-  `blockedReason` becomes one plain line, and it adds the "Build it?" pause above.
+  `blockedReason` becomes one plain line, and it adds the "Build this?" pause above.
 - `.claude/commands/duplo-extension.md`: Step 2 keeps the requirement template; its name proposal moves
   to Phase 1's Name row. Step 3's workspace-or-admin question moves to Phase 1; Step 3 keeps choosing
   the workspace and the scope-listing script. Step 4's list is replaced by a pointer to the subsection.

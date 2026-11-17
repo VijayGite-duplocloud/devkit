@@ -4,7 +4,7 @@
 
 **Goal:** The agent that designs an extension asks only plain questions, states its technical choices as plain defaults, and gets the user's approval of a plain summary before it writes code, in Studio and in `/duplo-extension`.
 
-**Architecture:** Phase 1 of `duplo-extension-dev/SKILL.md` gains one "Talking to the user" subsection that owns the question table, the four-pattern table, the summary shape and the in-product "Build it?" pause. The command points to it instead of keeping its own list. A static bash check pins the wording rules and the reference fixes; live runs on both paths check behaviour.
+**Architecture:** Phase 1 of `duplo-extension-dev/SKILL.md` gains one "Talking to the user" subsection that owns the question table, the four-pattern table, the summary shape and the in-product "Build this?" pause. The command points to it instead of keeping its own list. A static bash check pins the wording rules and the reference fixes; live runs on both paths check behaviour.
 
 **Tech Stack:** Markdown agent instructions (Claude Code skill + command), bash test in the repo's `tests/test-*.sh` style.
 
@@ -15,14 +15,14 @@
 - Branch `DUPLOAI-5468-approachable-intake` off `origin/dev`; the PR targets `dev`.
 - Terms that never appear in a user-facing question or in the four-pattern "says" column (case-insensitive, whole word): `spec`, `result`, `resource`, `scope`, `provider`, `provisioning`, `mode`, `CRUD`, `endpoint`, `controller`, `FE`, `section id`, `originType`, `remote`.
 - The four plain names, verbatim: Worker → **Background job**, Agent → **AI agent**, Passthrough → **Instant**, No-provision → **Read-only**.
-- Pause options, verbatim: **Build it** / **Change something**. `blockedReason`: `Review what I'll build`.
+- Pause: one `ask_human` `yes_no` ending "Build this?"; no model-added options. `blockedReason`: `Review what I'll build`.
 - Phase 1's technical settle-list and its existing mode-selection rules stay as they are. The `reference/` guides are untouched.
 - No push until the requester says so. Task 6's in-product run needs the branch on GitHub, so it waits for that go-ahead.
 
 ## Review Focus
 
 1. **A fully filled template** → the batch still confirms Name, Spec fields, Result fields as guesses; no other row is asked. Pinned by Task 6 run A.
-2. **"Change something" contradicting an earlier answer** → the summary is revised and asked again; no code is written in between. Pinned by Task 6 run B.
+2. **A change request contradicting an earlier answer** → the summary is revised and asked again; no code is written in between. Pinned by Task 6 run B.
 3. **Empty Scopes field and an outside system in the product** → the summary states it builds without testing against that system; the agent never calls a scopes listing (403 on the ticket token). Pinned by Task 6 run B.
 4. **"Only admins should manage this"** → admin derived and stated; the workspace-or-admin question is not asked. Pinned by Task 6 run C.
 5. **Two related things in one requirement** → the "Does one X hold many Ys?" question appears; with one thing it does not. Pinned by Task 6 runs A and C.
@@ -41,7 +41,7 @@
   - `SKILL.md` has `### Talking to the user` between `## Phase 1` and `## Phase 2`.
   - Every table row in that subsection: the `Ask the user` and `What the agent says` cells contain none of the Global Constraints terms.
   - The four plain names appear in that subsection.
-  - `SKILL.md` contains `Build it`, `Change something` and `Review what I'll build`, and no longer contains `section id`.
+  - `SKILL.md` contains `Build this?`, `before every ask` and `Review what I'll build`, no `Change something`, and no `section id /` question.
   - `SKILL.md` contains no `dirname "$0"`, no `PRIVATE`, no `22-admin-resources`.
   - The command contains `Talking to the user`, and none of `ParentRefSpec`, `consumed by the FE`, `named action`.
   - The command has no bare relative link: `grep -nE '(^|[ (\x60])reference/[0-9]'` is empty.
@@ -110,5 +110,5 @@
 - [ ] **Step 1: Run A, local** — `/duplo-extension` against the local stack with fixture A. Pass: one batch with Name, inputs and outputs as guesses, no parent/child question; the plan opens with **What you'll get** and names the plain pattern.
 - [ ] **Step 2: Run C, local** — fixture C. Pass: admin stated, never asked; the "hold many" question appears.
 - [ ] **Step 3: Push the branch** (requester's go-ahead) and set the local studio's system settings `extension-devkit-repo` = `duplocloud/devkit`, `extension-devkit-branch` = `DUPLOAI-5468-approachable-intake`.
-- [ ] **Step 4: Run B, product** — Studio → Add extension, fixture B, Scopes empty. Pass: one `ask_human` batch; the summary says it builds without testing against Jenkins; status `Blocked` / `Review what I'll build`; answer **Change something** with a contradicting edit → revised summary asked again, no `Authoring code` beat in between; then **Build it** → `Authoring code`.
+- [ ] **Step 4: Run B, product** — Studio → Add extension, fixture B, Scopes empty. Pass: one `ask_human` batch; the summary says it builds without testing against Jenkins; status `Blocked` / `Review what I'll build`; answer through "Chat about this" with a contradicting edit → `Blocked` re-posted, revised summary asked again, no `Authoring code` beat in between; then **Yes** → `Authoring code`.
 - [ ] **Step 5:** Record the questions and summaries from each run in the PR description. Reset `extension-devkit-branch` afterwards.

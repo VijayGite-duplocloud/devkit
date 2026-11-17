@@ -188,12 +188,13 @@ they want to see afterwards, who manages it, which outside system it talks to. S
 put questions to the user in their words, once, in one batch:
 
 - **Always ask:** the Name, Spec fields and Result fields rows, each as your guess for the user to confirm.
+  In-platform, when these three are all the batch holds, they ride the pause below instead of a separate ask.
 - **Also ask:** any other row where the requirement points two ways and a wrong guess changes what gets built.
 - **Every other row:** state your choice as a default in the summary below. The user approves the summary before
   you build, so a stated default is a decision.
 
 Never put a checklist term to the user (spec, result, resource, scope, provider, provisioning, mode, CRUD,
-endpoint, controller, section id). Examples below use a Jenkins job; use the user's own system and words.
+endpoint, controller, section id), except under **Technical details** in the summary, which is for reviewers. Examples below use a Jenkins job; use the user's own system and words.
 
 | Decision | Ask the user | Default when the requirement is silent |
 |---|---|---|
@@ -205,7 +206,7 @@ endpoint, controller, section id). Examples below use a Jenkins job; use the use
 | Provisioning mode | Never asked. State it: "This is a fixed set of steps, so it runs as a **background job** with no AI. Tell me if it needs AI judgement." | derived (table below) |
 | Custom endpoints | "Besides add, edit and delete, does it need any buttons? For example **Run now** or **View logs**." | none |
 | Access control | Only when a button does something sensitive: "Can anyone in the workspace press **Restart**, or only people you allow?" | anyone in the workspace |
-| One or many resources | Only with more than one thing: "Does one **Pipeline** hold many **Jobs**?" | flat |
+| One or many resources | Only with more than one thing, and never when one only uses the other (an admin thing that workspaces pick): "Does one **Pipeline** hold many **Jobs**?" | flat; an admin thing plus a workspace thing that picks it follows `samples/admin-settings` |
 | Menu placement | Only when the requirement points two ways: "Where in the left menu: its own **Jenkins** group, or under **DevOps**?" | its own group |
 | Deprovision / teardown | "When someone deletes one here, should the Jenkins job be deleted too?" | delete what provisioning created |
 | Outside auth | "How does Jenkins sign in: username and API token, or a single token?" | from the chosen connection |
@@ -223,10 +224,10 @@ The form shape (simple form, step-by-step setup, repeatable rows, one-holds-many
 the sample index above. Describe it in plain words in the summary ("a three-step setup: Connection, Job,
 Schedule"); the user can ask for a different one.
 
-**The summary the user approves** (local: the plan you `ExitPlanMode` with; in-platform: the "Build it?" ask below),
+**The summary the user approves** (local: the plan you `ExitPlanMode` with; in-platform: the "Build this?" ask below),
 per resource for multi-resource extensions:
 
-1. **What you'll get**: five to eight plain lines. Where it appears in the menu (AI DevOps or AI Admin), what someone
+1. **What you'll get**: five to eight plain lines. Its name, where it appears in the menu (AI DevOps or AI Admin), what someone
    fills in, what happens after they save (name the pattern by its plain name; in Agent mode, that the add form
    tells users AI does the work), what the page shows, what delete does.
 2. One line per default the user has not confirmed, so they can object.
@@ -241,16 +242,19 @@ per resource for multi-resource extensions:
 - **In-platform:** read `spec.description`/`spec.icon`/`spec.scopeIds` from `shared/extension.json` (plus
   `shared/uploads/*`). Ask through the bootstrap's protocol (`duplo-extension-ticket`, "Questions — ask in chat, never
   park"): POST `Blocked` with `subStatus` `Needs more details` and a `blockedReason` of one plain line, then ONE
-  `ask_human` call holding the whole batch. When the batch holds only the three always-ask guesses, skip it: the
-  summary lists them and the pause below covers corrections.
-  Then pause before any code, whatever the batch held: POST `Blocked` with the `blockedReason` "Review what I'll build":
+  `ask_human` call holding the whole batch (skip it when it holds only the three always-ask guesses). When the answers
+  arrive, go straight to the pause.
+  Then pause before any code, whatever the batch held. POST `Blocked` with the `blockedReason` "Review what I'll build":
   ```bash
   curl -fsS -X POST "$RES/status" -H "Authorization: Bearer $DUPLO_TOKEN" -H "Content-Type: application/json" \
     -d '{ "status": "Blocked", "subStatus": "Needs more details", "blockedReason": "Review what I'\''ll build" }'
   ```
-  and one `ask_human` `single_select` whose question is the summary, with the options **Build it** and **Change
-  something**. **Build it** → POST `Processing` / `Authoring code` and go to Phase 2. **Change something** → revise
-  the summary from the user's words and ask again. Never scaffold before **Build it**.
+  then ask ONE `ask_human` `yes_no` question: the summary, ending "Build this?". Add no options of your own: the
+  platform's "Chat about this" row is where the user says what to change.
+  - **Yes** → POST `Processing` / `Authoring code` and go to Phase 2.
+  - **No / anything else** → the reply is the change request. Revise the summary and repeat the pause: the `Blocked`
+    POST before every ask, then the question.
+  - Never scaffold before a **Yes**.
 - **Local:** ask the batch in one message (`AskUserQuestion` when the session has it) and **wait** for answers. The
   summary is the plan you `ExitPlanMode` with. Do not scaffold until it is approved.
 

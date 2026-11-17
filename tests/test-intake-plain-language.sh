@@ -55,9 +55,22 @@ missing=""
 for name in "Background job" "AI agent" "Instant" "Read-only"; do talking | grep -q "$name" || missing+=" '$name'"; done
 [ -z "$missing" ] && ok || bad "missing:$missing"
 
-t "the in-product pause is defined (Build it / Change something / Review what I'll build)"
-if grep -q "Build it" "$SKILL" && grep -q "Change something" "$SKILL" && grep -q "Review what I'll build" "$SKILL"; then ok
-else bad "pause wording missing from $SKILL"; fi
+t "the in-product pause is one yes_no ask, re-posted as Blocked before every ask"
+if ! grep -q "Review what I'll build" "$SKILL" || ! grep -q "Build this?" "$SKILL" || ! grep -q "before every ask" "$SKILL"; then
+  bad "pause wording missing from $SKILL"
+elif grep -q "Change something" "$SKILL"; then
+  bad "'Change something' duplicates the platform's own 'Chat about this' row"
+else ok; fi
+
+t "the three always-ask guesses ride the pause when they are all the batch holds, and the summary names it"
+if talking | grep -q "ride the pause" && talking | grep -qi "its name"; then ok
+else bad "no 'ride the pause' exception or no name in What you'll get"; fi
+
+t "Technical details is the one place checklist terms reach the user"
+talking | grep -q 'except under \*\*Technical details\*\*' && ok || bad "never-say rule has no Technical details exception"
+
+t "the one-or-many question skips a thing that only uses another"
+talking | grep "^| One or many" | grep -q "only uses" && ok || bad "one-or-many row fires on the admin + consumer shape"
 
 t "SKILL.md no longer asks for a menu 'section id'"
 grep -qi "section id /" "$SKILL" && bad "the 'section id / top-level / none' question is still in $SKILL" || ok
@@ -74,6 +87,14 @@ grep -q "22-admin-resources" "$SKILL" && bad "'22-admin-resources' label still p
 t "the command takes its questions from the skill"
 if ! grep -q "Talking to the user" "$CMD"; then bad "no pointer to 'Talking to the user' in $CMD"
 elif hits=$(grep -nE "ParentRefSpec|consumed by the FE|named action" "$CMD"); then bad "own question list still in $CMD: $hits"
+else ok; fi
+
+step() { awk -v h="## Step $1" 'index($0,h)==1{on=1; next} on && /^## /{exit} on' "$CMD"; }
+t "the command asks once: no separate name or connection round before Step 4"
+if step 2 | grep -q "for the user to"; then bad "Step 2 still asks the user to confirm the name"
+elif step 3 | grep -q "Which saved connection should I use"; then bad "Step 3 still asks for the connection"
+elif ! step 4 | grep -qi "saved connection"; then bad "Step 4's batch does not carry the connection question"
+elif grep -q "ask which one(s) to use" "$CMD"; then bad "admin path still asks which scope(s) in jargon"
 else ok; fi
 
 t "the command links reference guides by repo path"
