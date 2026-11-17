@@ -246,8 +246,10 @@ rotate_old_mongo_password() {
     || { echo "  ✖ $RUNTIME could not start mongo to rotate its password." >&2; exit 1; }
   # Wait for mongod itself first. A large volume replaying on a slow disk can take minutes, and a password tried
   # before mongod listens looks the same as a wrong one.
-  for i in $(seq 1 300); do mongo_ping && break; sleep 2; done
-  if ! mongo_ping; then
+  echo -n "    waiting for MongoDB to answer "
+  for i in $(seq 1 300); do mongo_ping && break; echo -n "."; sleep 2; done
+  if mongo_ping; then echo " up."; else
+    echo " no answer."
     echo "  ✖ MongoDB did not answer within 10 minutes of starting. Its data is untouched; see '$RUNTIME compose logs mongo'" >&2
     echo "    and re-run once it comes up." >&2
     exit 1
@@ -1184,9 +1186,13 @@ done
 # Name the runtime here, not only when something breaks: auto-detect is presence-based and docker-first,
 # so on a box with both installed the choice is otherwise invisible until it goes wrong.
 echo "==> Using $(runtime_label)"
-echo "==> Pulling images…"; "$RUNTIME" compose pull
+# A .env from before the mongo password existed has no line for it, and compose warns about an unset variable on
+# the pull, so the pull is given whatever .env holds, blank included.
+echo "==> Pulling images…"; MONGO_ROOT_PASSWORD="$(getenv MONGO_ROOT_PASSWORD)" "$RUNTIME" compose pull
 # The mongo password is settled here, after the pull and every prompt, so a studio already running from before the
-# upgrade keeps a password that works until the start below recreates it with the new one.
+# upgrade keeps a password that works until the start below recreates it with the new one. An install that kept the
+# old fixed password by hand, as the dev tags once offered, is treated as having none, so it rotates as well.
+[ "$(getenv MONGO_ROOT_PASSWORD)" != "$MONGO_OLD_PASSWORD" ] || setenv MONGO_ROOT_PASSWORD ""
 [ -n "$(getenv MONGO_ROOT_PASSWORD)" ] || rotate_old_mongo_password
 [ -n "$(getenv MONGO_ROOT_PASSWORD)" ] || setenv MONGO_ROOT_PASSWORD "$(openssl rand -hex 32)"
 # The installer mounts extensions/. A bind source the runtime has to create comes out root-owned under rootful docker

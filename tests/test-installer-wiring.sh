@@ -156,7 +156,7 @@ EOF
     compose_project() { printf devkit; }; sleep() { :; }
     eval "$(sed -n '/^MONGO_OLD_PASSWORD=/p; /^mongo_eval()/,/^}/p; /^mongo_ping()/p; /^rotate_old_mongo_password()/,/^}/p' run.sh)"
     rotate_old_mongo_password ) >"$d/out" 2>"$d/err"
-  R_RC=$?; R_ERR="$(cat "$d/err")"; R_CALLS="$(cat "$d/calls")"
+  R_RC=$?; R_ERR="$(cat "$d/err")"; R_OUT="$(cat "$d/out")"; R_CALLS="$(cat "$d/calls")"
   R_PW="$(grep -E '^MONGO_ROOT_PASSWORD=' "$d/env" | cut -d= -f2-)"; R_PENDING="$(grep -E '^MONGO_ROOT_PASSWORD_PENDING=' "$d/env" | cut -d= -f2-)"
   R_DB="$(cat "$d/pw")"; rm -rf "$d"
 }
@@ -220,6 +220,17 @@ chmod +x "$d/rt"
 rc=$?; [ "$rc" -ne 0 ] && ! grep -q '^MONGO_ROOT_PASSWORD=.' "$d/env" && grep -q '^MONGO_ROOT_PASSWORD_PENDING=.' "$d/env" \
   && grep -q 'MONGO_ROOT_PASSWORD was not written' "$d/err" && ! grep -q 'nothing was written' "$d/err" \
   && ok || bad "rc=$rc $(cat "$d/env") $(cat "$d/err")"; rm -rf "$d"
+
+t "run.sh treats the old fixed password in .env as no password, so a kept install rotates too"
+grep -q '^\[ "\$(getenv MONGO_ROOT_PASSWORD)" != "\$MONGO_OLD_PASSWORD" \] || setenv MONGO_ROOT_PASSWORD ""$' run.sh && ok || bad "run.sh"
+
+t "run.sh gives the pull whatever .env holds for the mongo password, so compose does not warn on an older .env"
+grep -q 'MONGO_ROOT_PASSWORD="\$(getenv MONGO_ROOT_PASSWORD)" "\$RUNTIME" compose pull' run.sh && ok || bad "run.sh"
+
+t "rotation: the wait for mongod prints a dot per failed try and says when it is up"
+rotate_case 1 authpass "" 5
+dots="$(grep -o 'waiting for MongoDB to answer \.*' <<<"$R_OUT" | tr -cd '.' | wc -c | tr -d ' ')"
+[ "$R_RC" -eq 0 ] && [ "$dots" = 5 ] && grep -q ' up\.' <<<"$R_OUT" && ok || bad "rc=$R_RC dots=$dots out=$R_OUT"
 
 t "run.sh settles the mongo password after the pull and before the start"
 PULL="$(grep -n 'compose pull$' run.sh | head -1 | cut -d: -f1)"; ROT="$(grep -n '|| rotate_old_mongo_password$' run.sh | head -1 | cut -d: -f1)"
