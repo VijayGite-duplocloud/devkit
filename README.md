@@ -1,11 +1,9 @@
-# DuploCloud Extension Developer Kit
+# DuploCloud Agent Developer Kit
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/duplocloud/devkit?label=release)](https://github.com/duplocloud/devkit/releases)
 
-Run the DuploCloud AI HelpDesk platform on your laptop in containers — then build your own
-**Agent** against it. Each Agent you write ships a backend, a UI, and its own provisioning, and
-hot-loads into the running platform with no restart.
+Run the DuploCloud Agentic Platform on your laptop in containers, then build your own Agent against it. Each Agent you write ships a backend, a UI, and its own provisioning, and hot-loads into the running platform with no restart.
 
 ![The DuploCloud platform running locally, with the New Extension form filled in](docs/images/devkit-new-extension.png)
 
