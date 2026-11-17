@@ -85,9 +85,9 @@ Before it asks you anything, it probes the platform: it reads `DUPLO_TARGET` fro
 whether the local stack answers, along with any remote platform you have configured. Then it asks
 where to build:
 
-> Use the local dev-kit platform, or a remote one?
+> Build against the DuploCloud running on this machine, or one hosted elsewhere?
 
-Choose **local**. That is the stack you brought up on page 1 and connected AWS to on page 2, and it is
+Choose **this machine**. That is the stack you brought up on page 1 and connected AWS to on page 2, and it is
 the target the `scripts/` in this repo read from `.env` as well.
 
 If it reports that the local stack is **down**, `./run.sh` is not running. Start it in another terminal,
@@ -95,14 +95,13 @@ then run the command again.
 
 ## 4.4 Give it the specification
 
-With the target settled, the command asks what you want to build. The question arrives as a set of
-options with **Other** at the bottom. Pick **Other** — the offered options are starting points, and you
-are supplying the whole requirement — then paste the block below into the free-text box.
+With the target settled, the command hands you a short requirement template to fill in: what you want to
+build, what someone fills in, what should happen, and what to show. Paste the block below in its place.
 
 Paste it whole rather than inventing something of your own. Written out this way it settles nearly
-everything the intake would otherwise draw out of you one question at a time — the resource shape, the
+everything the intake would otherwise ask in its one batch of plain questions — the resource shape, the
 provisioning mode, where it lands in the navigation, how results are stored — so the command can go
-almost straight to a plan.
+almost straight to its plan, which opens with **What you'll get**, a plain summary for you to approve.
 
 ```text
 Build an extension called s3-guard: a security posture dashboard for S3 buckets.

@@ -185,20 +185,20 @@ Start Claude Code there. It picks up the `.claude/` directory in this repo, whic
 
 It probes your platform first, then asks where to build:
 
-> Use the local dev-kit platform, or a remote one?
+> Build against the DuploCloud running on this machine, or one hosted elsewhere?
 
-Choose **local** — that is the stack you have been running all quickstart.
+Choose **this machine** — that is the stack you have been running all quickstart.
 
 If it reports the local stack is down, `./run.sh` is not running. Start it and run the command again.
 
 ### c. Paste this specification
 
-Next it asks what you want to build, as a set of options with **Other** at the bottom. Pick **Other** —
-the offered options are starting points, and you are going to supply the whole thing — then paste the
-block below into the free-text box.
+Next it hands you a short requirement template to fill in: what you want to build, what someone fills in,
+what should happen, and what to show. Paste the block below in its place.
 
-It answers everything the intake would otherwise ask you one
-question at a time, so the command goes almost straight to a plan:
+It answers everything the intake would otherwise ask in its one batch of plain questions ("When someone adds
+one, what do they fill in?"), so the command goes almost straight to its plan. The plan opens with **What
+you'll get**, a plain summary for you to approve:
 
 ```text
 Build an extension called whois: a domain lookup resource. You give it a domain name, it
