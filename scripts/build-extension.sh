@@ -144,6 +144,8 @@ while IFS=$'\t' read -r u sc; do
 done < <(jq -r '(.frontend.routes // []) as $r | .frontend.menus // [] | .[] | (.scope // "workspace") as $s
   | [.. | objects | .relativeUrl? // empty] | .[] as $u
   | select(([$r[] | select(.path == $u) | (.scope // "workspace")] | index($s)) == null) | "\($u)\t\($s)"' "$MANIFEST")
+# frontend.setup feeds the portal's "Agent Setup" nav; the portal silently ignores an invalid entry.
+scripts/validate-setup.sh "$MANIFEST" || viol=1   # cwd is the repo root (cd above)
 # A plain controller (ControllerBase/Controller, e.g. a read-only workspace view of an admin resource) gets no
 # authorization unless it says so: the host has no fallback policy, and only [Authorize] runs the tenant policy
 # (workspace membership; Admin Workspace grants on /aiservicedesk/admin). Resource controllers inherit it from their base.
@@ -195,11 +197,14 @@ case "$DIR" in
   *samples/*|*templates/*) ;;
   *)
     if [ -d "$DIR/frontend/src" ]; then
-      hits=$(grep -rnE 'HelloService|HelloWorld|hw-(add|list|view|root)|hello\.service' "$DIR/frontend/src" 2>/dev/null || true)
+      hits=$(grep -rnE 'HelloService|HelloWorld|Hello World|hw-(add|list|view|root|setup)|hello\.service|HELLO_WORLD_TYPE|HelloSettings|helloworld[./]settings|type:[[:space:]]*['"'"'"]helloworld['"'"'"]' "$DIR/frontend/src" 2>/dev/null || true)
       if [ -n "$hits" ]; then
         echo "  ✗ frontend still has template 'Hello'/'hw-' identifiers — rename them to your resource:" >&2
         printf '%s\n' "$hits" | head -8 | sed 's/^/      /' >&2; viol=1
       fi
+    fi
+    if [ "$(jq -r '(.frontend.setup.relativeUrl)? // empty' "$MANIFEST" 2>/dev/null)" = "extensions/helloworld-setup" ]; then
+      echo "  ✗ frontend.setup.relativeUrl is still the template's 'extensions/helloworld-setup' — use extensions/<idName>-setup (reference/02-authoring-guide.md)" >&2; viol=1
     fi ;;
 esac
 

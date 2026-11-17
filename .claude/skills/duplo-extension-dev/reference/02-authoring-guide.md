@@ -83,7 +83,7 @@ Ties the bundle together. For a typed extension (see the hello-world manifest):
   "skills": [{ "folder": "com.duplocloud.helloworld/0.1.0/skills/provision-helloworld", "isBuiltIn": true }],
   "skillMappings": [{ "originType": "HelloWorld", "subType": "hello-world",
                       "skillNames": ["provision-helloworld"], "timeout": { "provision": 300, "deprovision": 120 } }],
-  "frontend": { "remote": { … }, "menus": [ … ], "routes": [ … ] }
+  "frontend": { "remote": { … }, "menus": [ … ], "routes": [ … ], "setup": { … } }
 }
 ```
 Critical: `archetype` must be `"typed"` so the loader takes the DLL path; the five `*Type` names must be the
@@ -332,6 +332,63 @@ A group behaves as if a flag is on when any of its visible children has it on. T
 
 Extension repos get this check only after they pull the new devkit scripts. Until then their builds skip it.
 
+### `frontend.setup`
+
+Every agent ships an admin setup page, where an administrator connects its providers and sets its admin-wide
+settings once. `frontend.setup` points the portal at it:
+
+```json
+"routes": [
+  { "path": "extensions/helloworlds", "resourceType": "HelloWorld", "subType": "hello-world" },
+  { "path": "extensions/helloworld-setup", "scope": "admin" }
+],
+"setup": { "title": "Set up", "relativeUrl": "extensions/helloworld-setup" }
+```
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `relativeUrl` | string | yes | The setup page's route. Starts with `extensions/` and equals a `frontend.routes[].path` whose `scope` is `"admin"`. |
+| `title` | string | no | Label of every Set up button: post-install prompt ("Set it up now?"), banner, list row and detail modal. Default "Set up". |
+
+- **Admin route only.** A route with no `scope` is workspace-scoped and does not match.
+- **Where it shows:** the portal lists every valid entry under **AI Admin → Agent Setup → {agent name}**, sorted
+  by name, and shows the Set up button (labelled by `title`) in the post-install prompt, the banner, the list row
+  and the detail modal. If two entries share a `relativeUrl`, the first wins.
+- **An invalid entry is silently ignored** by the portal — no nav entry, no prompt, no Set up button.
+- **The page:** every manifest route loads the same `Extension` module, and every admin mount (an admin-scoped
+  resource's list too) carries `data.scope === 'admin'`. So `extension.routes.ts` picks the setup page with a
+  `canMatch` on the mount's **path**: the URL being recognized must end in `SETUP_PATH`, which must equal
+  `relativeUrl`. Every other mount gets the list. The page is admin-wide and never reads the current workspace
+  (template: `frontend/src/app/setup/`).
+- **What it sets up:** one connection per provider the agent uses (the connections kit,
+  [20-ui-library](20-ui-library.md#connections-the-setup-kit)), then the agent's own settings (the template's
+  `settings.service.ts`).
+- **Nothing to set up** → replace the card body with a one-line "Nothing to set up" note and drop Save (the template
+  has no such branch).
+- **Settings endpoint:** the platform has none for agents. Add a plain `[Authorize]` `ControllerBase` routed at the
+  template's `SETTINGS_URL`, `v1/aiservicedesk/admin/extensions/<idName>/settings`, that serves GET/PUT of one
+  settings object. `[Authorize]` runs the Admin Workspace grant check on `/aiservicedesk/admin` routes; the build
+  gate requires it on every plain controller. Precedent for a plain `[Authorize]` controller:
+  `samples/admin-settings/backend/AdminSettingsReadController.cs`. Until the endpoint exists, the template's
+  localStorage fallback keeps values in one browser only, and provisioning can't read them. Once it exists, delete
+  the fallback (the `catchError` branches, `FALLBACK_KEY`, the `local` note). The GET must then answer `{}` when
+  nothing is saved yet, not 404: without the fallback a 404 fails `load()` and leaves Save disabled.
+- **Existing settings route:** keep the old workspace route, with a guard that returns a `UrlTree` to
+  `/ai/suite/admin/<relativeUrl>` (not `redirectTo`, which keeps the old URL so the setup mount check misses). The
+  guard must not fire on the setup mount. Remove the old menu entries. Reference: the `settings` route in
+  duploai-issue-reporter's `extension.routes.ts` (setup check in `setup-mount.ts`; until it merges, both are on
+  [duploai-issue-reporter#23](https://github.com/duplocloud-internal/duploai-issue-reporter/pull/23)).
+
+#### Build check
+
+`scripts/validate-setup.sh <manifest.json>` applies the portal's rule, stricter on `title`, and fails on an invalid
+entry: not an object, a missing or non-`extensions/` `relativeUrl`, no matching admin route, or a non-string
+`title`. With a sibling `frontend/src`, it also fails when no `SETUP_PATH` there equals `relativeUrl`. No
+`frontend.setup` passes. The manifest `id` and `frontend.remote.remoteEntry`, which the portal also requires, are
+checked elsewhere. `build-extension.sh` runs it in its naming gate, so `--validate-only` covers it too. The
+same gate fails a renamed extension that keeps the template's setup names (`hw-setup`, `HELLO_WORLD_TYPE`,
+`HelloSettings`, `helloworld/settings`, `extensions/helloworld-setup`).
+
 ## Build, package, load
 
 The `duplo-extension-dev` skill (`../SKILL.md`) does this — both inside an Extension provisioning ticket and on
@@ -391,7 +448,10 @@ In `angular.json`, set `outputPath` to `{ "base": "dist", "browser": "" }` — A
 > | class `HelloService` | `<Name>Service` |
 > | interface `HelloWorld` | `<Name>` |
 > | `add-/list-/view-hello.component.ts` + classes `Add/List/ViewHelloComponent` | `…<resource>.component.ts` + `Add/List/View<Name>Component` |
-> | selectors `hw-add`/`hw-list`/`hw-view`/`hw-root` | `<slug>-add`/`<slug>-list`/`<slug>-view`/`<slug>-root` |
+> | selectors `hw-add`/`hw-list`/`hw-view`/`hw-root`/`hw-setup` | `<slug>-add`/`<slug>-list`/`<slug>-view`/`<slug>-root`/`<slug>-setup` |
+> | `setup.component.ts` `HELLO_WORLD_TYPE`; `settings.service.ts` `HelloSettings`, `SETTINGS_URL`, `FALLBACK_KEY` | one type definition per provider ([07](07-scope-credentials.md#shared-provider-types)); `<Name>Settings`, your `[Authorize]` admin settings controller's URL ([`frontend.setup`](#frontendsetup)), `<idName>.settings` |
+> | setup page texts "Hello World setup", "1. Connect a Hello World account *" | "<Name> setup", one "N. Connect <Provider> *" label per provider |
+> | manifest route `extensions/helloworld-setup` + `frontend.setup.relativeUrl` + `SETUP_PATH` in `extension.routes.ts` | `extensions/<idName>-setup` (all three; `<idName>` = last segment of the manifest `id`) |
 > | `federation.config.js` `name` (== manifest `frontend.remote.remoteName`) | unique `duploExtension<Name>` |
 > Update the routes in `extension.routes.ts`, and each component's own `imports`, to the renamed classes.
 
@@ -488,12 +548,12 @@ a plain `npm install` just works from a fresh clone. Two schemes coexist:
 
 - **The samples** share one copy at repo-root `packages/`, since they never leave this repo:
   ```json
-  "@duplocloud-internal/ng-common-lib": "file:../../../packages/duplocloud-internal-ng-common-lib-0.5.3.tgz",
+  "@duplocloud-internal/ng-common-lib": "file:../../../packages/duplocloud-internal-ng-common-lib-0.8.0.tgz",
   ```
 - **The skill template** (`templates/helloworld/frontend/`) keeps its **own** copy under `vendor/`, because it
   gets copied out to `extensions/<name>/` or a provisioning workdir and must stay self-contained:
   ```json
-  "@duplocloud-internal/ng-common-lib": "file:vendor/duplocloud-internal-ng-common-lib-0.5.3.tgz",
+  "@duplocloud-internal/ng-common-lib": "file:vendor/duplocloud-internal-ng-common-lib-0.8.0.tgz",
   ```
 
 Scaffolding from the template carries the tarball and the specifier with it — keep both when you copy.
