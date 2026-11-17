@@ -199,6 +199,53 @@ its requirements file here serve the composite `extension-sign` action only. A r
 action's own copy of `extension-sign.py` and its own pinned requirements, which live in `duplocloud/actions`,
 under that repository's review.
 
+## Moving an existing repository onto this flow
+
+This section is for a DuploCloud repository that still carries the earlier `release.yml`, the one that ran
+`scripts/release-extensions.sh` behind a `.github/extension-publishers.json` allowlist. That flow no longer
+registers anything: the allowlist only gated a local step, and the publisher role it went on to assume trusts a
+repository through ai-release's Terraform, not through that file. A repository that lists itself there fails at
+the credentials step instead of skipping the upload. The steps below replace it. Each one names who does it,
+since three of them are outside the repository.
+
+1. **Upgrade the devkit.** Run `./scripts/upgrade_dev_kit.sh --version <ref>` from the repository root, where
+   `<ref>` is the devkit branch or tag that carries the action-based `release.yml` (see
+   [upgrading.md](upgrading.md)). The upgrade replaces `.github/`, `scripts/` and `build/` wholesale, so it
+   brings the new workflow, removes `extension-publishers.json`, and refreshes `build-extension.sh` and the
+   builder image. Your extensions, their project files and your own docs are untouched. Commit the result on a
+   branch and let the pull request's Extension CI run; it builds the bundle the way the release will.
+2. **Settle the manifest id.** The console accepts an id only inside a namespace the publishing team holds.
+   DuploCloud's team holds `duplo`, `com.duplo`, `com.duplocloud`, `net.duplo` and `net.duplocloud`; the
+   marketplace release tickets ask for `com.duplocloud.<name>`. Changing an id makes the extension a new record
+   to the console and to every installer, so decide it before the record below exists, and treat installs of
+   the old id as a separate migration.
+3. **Create the console record** (a platform owner). Under **Agents > Agents** in the prod console, an agent
+   whose manifest id equals the `id` in `manifest.json`, under the publishing team, with its categories, status
+   and access set. The action finds the record by that id and fails the job when none exists.
+4. **Join the publisher role's trust list** (an ai-release PR, applied by an ai-release maintainer). Read the
+   repository's OIDC subject prefix with
+   `gh api repos/<org>/<repo>/actions/oidc/customization/sub --jq .sub_claim_prefix`, then add the repository
+   and that prefix to `extension_publisher_repositories` in ai-release's `terraform/prod/main.tf` (see "The
+   role trust" above). Until the apply, a release fails at the credentials step, before anything is built.
+5. **Check the repository's secrets and variables** (an organization admin for the grants). `CONSOLE_SIGNING_KEY`
+   and `CONSOLE_API_KEY` are organization secrets granted per repository, so the repository has to be on their
+   lists; `CONSOLE_SIGNING_CERT`, `EXTENSION_PUBLISHER_ROLE_ARN` and `ARMDOT_LICENSE_KEY` are organization-wide
+   (see the table under "In DuploCloud's organizations"). `DUPLO_HOST` and `DUPLO_TOKEN` stay the repository's
+   own, and the token expires, so a release that fails at "Fetching SDK feed" with a 401 needs a fresh one.
+   The release job names any missing value before the build.
+6. **Mind the host's SDK line.** A host on extension SDK 1.2 or later ships `net10.0` reference assemblies
+   only, and the build picks the target framework from the host's SDK version, so a repository pointed at such
+   a host builds `net10.0` without a project-file change, and a `net8.0` build for an older host still loads on
+   both. A builder image that still ships the .NET 8 SDK fails that build with NETSDK1045; the upgrade in step
+   1 brings the image that does not.
+7. **Verify.** Merge to `main`. The release job cuts one GitHub Release per build, tagged
+   `<slug>-v<version>-sdk-<sdkVersion>`, uploads it through the role and registers it as an unpublished version
+   on the console record. The job's summary names each one. A platform owner publishes the version from the
+   console once it is checked.
+
+Steps 3, 4 and 5 need other people, so start them while the upgrade branch is in review rather than after it
+merges.
+
 ## The channels bucket and the license server
 
 In DuploCloud's organizations a signed build uploads to
