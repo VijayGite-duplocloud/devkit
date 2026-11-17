@@ -1320,6 +1320,41 @@ case "$KB_RC" in
   *) echo "    (knowledge base setup failed — run ./scripts/register-qdrant.sh manually)" ;;
 esac
 
+# ── where to open the portal ──────────────────────────────────────────────────
+# Authentication__FrontendBaseUrl is the configured portal address (it defaults to http://localhost:$UI_PORT
+# above), so a customised host shows up in the banner instead of a localhost link a browser elsewhere can't use.
+PORTAL_URL="$(getenv Authentication__FrontendBaseUrl)"; PORTAL_URL="${PORTAL_URL%/}"
+[ -n "$PORTAL_URL" ] || PORTAL_URL="http://localhost:$UI_PORT"
+# The studio wait above says nothing about the UI container, so check it before telling anyone to open it.
+# Probed on localhost:$UI_PORT — what this machine can reach — whatever address the banner shows. Short and
+# non-fatal: a slow UI gets a warning in the final message, not a failed run.
+PORTAL_UP=0
+echo -n "==> Waiting for the portal at http://localhost:$UI_PORT "
+for _ in $(seq 1 10); do
+  curl -fsS -o /dev/null --max-time 3 "http://localhost:$UI_PORT/" 2>/dev/null && { PORTAL_UP=1; echo " ready."; break; }
+  echo -n "."; sleep 3
+done
+[ "$PORTAL_UP" = 1 ] || echo " not answering yet."
+
+# The last thing the run prints: what to open, and how to sign in. It goes after the build/deploy tips on
+# purpose — a URL inside the status block scrolled off behind them and was easy to miss.
+portal_open_message() { # url email up(0|1)
+  local url="$1" email="$2" up="$3" port
+  echo
+  echo "==> Open the portal in your browser:  $url"
+  echo "    Sign in as $email with the admin password you set."
+  [ "$up" = 1 ] || echo "    ⚠ The portal isn't answering yet — give it a minute; if it still won't load, see docs/troubleshooting.md."
+  # Over SSH, localhost is the remote machine, not the browser's. Say how to tunnel the port across.
+  case "$url" in
+    http://localhost:*|http://127.0.0.1:*)
+      if [ -n "${SSH_CONNECTION-}" ]; then
+        port="${url##*:}"; port="${port%%/*}"
+        echo "    (You're on SSH. From your own machine run:  ssh -L $port:localhost:$port <user>@<this-host>  — then open the URL there.)"
+      fi ;;
+  esac
+  return 0
+}
+
 PROVIDER_DESC="$MODEL"
 [ "$MODEL" = bedrock-instance-role ] && PROVIDER_DESC="bedrock via EC2 instance role${AWS_ROLE:+ ($AWS_ROLE)} @ $(getenv AWS_REGION) — no keys in .env"
 [ "$MODEL" = gateway ] && PROVIDER_DESC="LLM gateway @ $(getenv ANTHROPIC_BASE_URL)"
@@ -1328,7 +1363,7 @@ PROVIDER_DESC="$MODEL"
 cat <<EOF
 
 ✔ Platform ready (provider: $PROVIDER_DESC)
-  UI        http://localhost:$UI_PORT     (login: $EMAIL)
+  UI        $PORTAL_URL     (login: $EMAIL)
   API       $API
   Workspace extension-dev  ($WS)  ·  agent registered + attached
   Token     DUPLO_ADMIN_TOKEN set in .env (permanent)
@@ -1345,3 +1380,4 @@ Build & deploy your extension (scripts read the target from .env — no DUPLO_BA
   # re-attach the agent to another workspace: ./scripts/register-agent.sh <workspace-id>
   # attach the devops persona elsewhere:       ./scripts/register-persona.sh <workspace-id>
 EOF
+portal_open_message "$PORTAL_URL" "$EMAIL" "$PORTAL_UP"
