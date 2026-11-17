@@ -120,7 +120,8 @@ Settle before building (derive, else ask — **after** listening):
   [21-admin-resources](reference/21-admin-resources.md).
 - **Spec fields** — each with name, type, and required/optional. **Result fields** — same.
 - **Provisioning MODE** — decide HOW this resource is provisioned. **Do not default to an agent skill.** Pick by
-  what the work actually is (derive from the requirement; confirm if unsure):
+  what the work actually is (derive from the requirement; tell the user your pick by its plain name from
+  [Talking to the user](#talking-to-the-user)):
   | Mode | Choose when the requirement is… | Wiring | Sample |
   |---|---|---|---|
   | **Worker** | a **deterministic** job: pure compute, or **reconcile/apply multiple objects** with retry/drift; words like *"worker", "background", "compute", "reconcile", "keep in sync"*. **No LLM needed.** | service `NoSkillsFallbackMode => ProvisioningMode.Worker`; **no** skill / `skillMappings`; a `ResourceWorkerBase` whose `ApplyAsync` does the work + `SaveProgressAsync`; register `AddHostedService` in `IDuploExtension.Configure` | `samples/worker-compute` (compute) · `samples/worker-appstack` (k8s) |
@@ -170,35 +171,87 @@ Settle before building (derive, else ask — **after** listening):
   scaffold ships), under a parent entity (child resources), or grouped under the extension's own category node. Does
   any **custom endpoint** need an explicitly granted **named action** instead of plain CRUD (restart / console /
   credential-minting / apply-infrastructure)? — [18-access-control](reference/18-access-control.md).
-- **Menu placement** — ask where it appears in the AI Suite left-nav (by **title**, never silently default to
-  DevOps): a **new top-level group** (e.g. `Jenkins`, `GCP`), **nested under an existing section** (e.g. `DevOps`), or
-  **no menu**. An **admin** resource's tree goes in the **AI Admin** nav: its top-level node carries
+- **Menu placement** — where it appears in the AI Suite left-nav, by **title**: a **new top-level group** (e.g.
+  `Jenkins`, `GCP`), **nested under an existing section** (e.g. `DevOps`), or **no menu**. Default to its own
+  group and state it in the summary; ask only when the requirement points two ways. An **admin** resource's tree goes in the **AI Admin** nav: its top-level node carries
   `"scope": "admin"`, and so does each `routes[]` entry it links to ([21](reference/21-admin-resources.md#frontend)). The user gives titles; **you** generate ids, `relativeUrl`s and the matching `frontend.routes[]` —
   [08-parent-child-and-menus](reference/08-parent-child-and-menus.md). Also settle **title** + **`matIcon`** per
   item — derive the icon from the extension's purpose, per the Left-nav icon bullet above.
 - **One or many resources?** — **flat** (independent — e.g. `GCP` → network/cluster/database) or **parent → child**
   (`samples/parent-child`); several top-level menu groups are fine — [08](reference/08-parent-child-and-menus.md).
 
-**Present the settled shape for approval** (local: the plan you `ExitPlanMode` with; in-platform: the `Processing`
-summary you post) **as a structured shape, not a prose blurb:** a **Spec** field table (name · type ·
-required/optional), a **Result** field table (name · type), the **extension scope** (workspace / admin) and the **provisioning mode**, each with a one-line reason, the
-**detail view's shape** — the **lifecycle phases** this resource goes through (label + the status/result field that
-drives each; [19-detail-page](reference/19-detail-page.md) → "Deriving phases") and the **Result tabs** (Overview at
-minimum; name each further tab; [17-custom-result-views](reference/17-custom-result-views.md)) — and a short
-**user-experience** walkthrough: left-nav placement (AI DevOps or AI Admin), the add form (with the AI-use disclosure in Agent mode), the list, the detail page, and what provisioning
-does end-to-end. Do this per resource for multi-resource extensions.
+### Talking to the user
+
+The list above is your checklist; its words are yours. The user knows their problem: what people type in, what
+they want to see afterwards, who manages it, which outside system it talks to. Settle the checklist from that, and
+put questions to the user in their words, once, in one batch:
+
+- **Always ask:** the Name, Spec fields and Result fields rows, each as your guess for the user to confirm.
+- **Also ask:** any other row where the requirement points two ways and a wrong guess changes what gets built.
+- **Every other row:** state your choice as a default in the summary below. The user approves the summary before
+  you build, so a stated default is a decision.
+
+Never put a checklist term to the user (spec, result, resource, scope, provider, provisioning, mode, CRUD,
+endpoint, controller, section id). Examples below use a Jenkins job; use the user's own system and words.
+
+| Decision | Ask the user | Default when the requirement is silent |
+|---|---|---|
+| Name | "I'll call it **Jenkins Jobs**. Keep that name?" (derive the ids yourself) | derived from the requirement |
+| Extension scope | "Who manages these: people in a workspace, or only platform admins?" | people in a workspace |
+| Provider scopes for testing | "To test this I need to reach Jenkins. Which saved connection should I use?" List them by name, plus "it doesn't need one". | none when the work touches no outside system. In-platform the create form's Scopes field answers this and the ticket cannot list connections: when the field is empty and the work needs one, state "No Jenkins connection was picked, so I'll build it without testing against Jenkins." |
+| Spec fields | "When someone adds one, what do they fill in? My guess: job name (required), branch (default main)." | the requirement's Inputs section |
+| Result fields | "When it's done, what should the page show? My guess: build number, status, duration, a link to the log." | the requirement's Result section |
+| Provisioning mode | Never asked. State it: "This is a fixed set of steps, so it runs as a **background job** with no AI. Tell me if it needs AI judgement." | derived (table below) |
+| Custom endpoints | "Besides add, edit and delete, does it need any buttons? For example **Run now** or **View logs**." | none |
+| Access control | Only when a button does something sensitive: "Can anyone in the workspace press **Restart**, or only people you allow?" | anyone in the workspace |
+| One or many resources | Only with more than one thing: "Does one **Pipeline** hold many **Jobs**?" | flat |
+| Menu placement | Only when the requirement points two ways: "Where in the left menu: its own **Jenkins** group, or under **DevOps**?" | its own group |
+| Deprovision / teardown | "When someone deletes one here, should the Jenkins job be deleted too?" | delete what provisioning created |
+| Outside auth | "How does Jenkins sign in: username and API token, or a single token?" | from the chosen connection |
+
+The four provisioning modes, as the user hears them:
+
+| Mode | Plain name | What the agent says |
+|---|---|---|
+| Worker | **Background job** | Runs a fixed set of steps in the background and retries until done. No AI. |
+| Agent | **AI agent** | An AI works out the steps each time. For open-ended work. |
+| Passthrough | **Instant** | Creates one thing the moment you save. |
+| No-provision | **Read-only** | Shows information and creates nothing. |
+
+The form shape (simple form, step-by-step setup, repeatable rows, one-holds-many, tabbed results) is your pick from
+the sample index above. Describe it in plain words in the summary ("a three-step setup: Connection, Job,
+Schedule"); the user can ask for a different one.
+
+**The summary the user approves** (local: the plan you `ExitPlanMode` with; in-platform: the "Build it?" ask below),
+per resource for multi-resource extensions:
+
+1. **What you'll get**: five to eight plain lines. Where it appears in the menu (AI DevOps or AI Admin), what someone
+   fills in, what happens after they save (name the pattern by its plain name; in Agent mode, that the add form
+   tells users AI does the work), what the page shows, what delete does.
+2. One line per default the user has not confirmed, so they can object.
+3. **Technical details**, as a structured shape: a **Spec** field table (name · type · required/optional), a
+   **Result** field table (name · type), the **extension scope** (workspace / admin) and the **provisioning mode**,
+   each with a one-line reason, and the **detail view's shape** — the **lifecycle phases** this resource goes through
+   (label + the status/result field that drives each; [19-detail-page](reference/19-detail-page.md) → "Deriving
+   phases") and the **Result tabs** (Overview at minimum; name each further tab;
+   [17-custom-result-views](reference/17-custom-result-views.md)).
 
 **Where the answers come from / how to ask:**
-- **In-platform:** read `spec.description`/`spec.icon` from `shared/extension.json`. If anything required is missing
-  or ambiguous, POST status **`Blocked`** with a `blockedReason` that lists the specific questions (and post the
-  same as a ticket chat message), then **stop** — do not scaffold. On the next invocation re-read
-  `shared/extension.json` + the latest chat reply and proceed **only** once every required item is unambiguous.
-  Once clear, POST `Processing` and continue (Phase 6 shows the curl).
+- **In-platform:** read `spec.description`/`spec.icon`/`spec.scopeIds` from `shared/extension.json` (plus
+  `shared/uploads/*`). Ask through the bootstrap's protocol (`duplo-extension-ticket`, "Questions — ask in chat, never
+  park"): POST `Blocked` with `subStatus` `Needs more details` and a `blockedReason` of one plain line, then ONE
+  `ask_human` call holding the whole batch. When the batch holds only the three always-ask guesses, skip it: the
+  summary lists them and the pause below covers corrections.
+  Then pause before any code, whatever the batch held: POST `Blocked` with the `blockedReason` "Review what I'll build":
   ```bash
   curl -fsS -X POST "$RES/status" -H "Authorization: Bearer $DUPLO_TOKEN" -H "Content-Type: application/json" \
-    -d '{ "status": "Blocked", "blockedReason": "Need before I can build: (1) menu placement — section id / \"top-level\" / none? (2) spec fields + types. ..." }'
+    -d '{ "status": "Blocked", "subStatus": "Needs more details", "blockedReason": "Review what I'\''ll build" }'
   ```
-- **Local:** ask the developer conversationally and **wait** for answers. Do not scaffold until clear.
+  and one `ask_human` `single_select` whose question is the summary, with the options **Build it** and **Change
+  something**. **Build it** → POST `Processing` / `Authoring code` and go to Phase 2. **Change something** → revise
+  the summary from the user's words and ask again. Never scaffold before **Build it**.
+- **Local:** ask the batch in one message (`AskUserQuestion` when the session has it) and **wait** for answers. The
+  summary is the plan you `ExitPlanMode` with. Do not scaffold until it is approved.
 
 ## Phase 2 — scaffold from the template
 

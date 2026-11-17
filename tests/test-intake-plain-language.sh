@@ -60,7 +60,7 @@ if grep -q "Build it" "$SKILL" && grep -q "Change something" "$SKILL" && grep -q
 else bad "pause wording missing from $SKILL"; fi
 
 t "SKILL.md no longer asks for a menu 'section id'"
-grep -qi "section id" "$SKILL" && bad "'section id' still in $SKILL" || ok
+grep -qi "section id /" "$SKILL" && bad "the 'section id / top-level / none' question is still in $SKILL" || ok
 
 t "SKILL.md copies the scaffold from a real path"
 grep -q 'dirname "\$0"' "$SKILL" && bad "\$(dirname \"\$0\") resolves to the shell in Claude's Bash" || ok
