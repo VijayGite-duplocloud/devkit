@@ -40,7 +40,7 @@ from a built-in resource (Network, Namespace, …).
 > [19-detail-page](reference/19-detail-page.md) — the detail-page shell, the lifecycle rail, per-resource phases per mode ·
 > [20-ui-library](reference/20-ui-library.md) — every `ng-common-lib` export, a "need X → use Y" picker, verified recipes, and what works in a remote ·
 > [21-theming](reference/21-theming.md) — Light/Dark and brand themes: the `$g-*` colour names, rules, editors and charts.
-> [22-admin-resources](reference/21-admin-resources.md) — **admin-scoped** resources: `AdminResourcesController`, the admin route, the Admin Workspace, AI Admin menus/routes, and the skill write-back URL.
+> [21-admin-resources](reference/21-admin-resources.md) — **admin-scoped** resources: `AdminResourcesController`, the admin route, the Admin Workspace, AI Admin menus/routes, and the skill write-back URL.
 
 > **Every dev-kit extension is TYPED — there is no archetype choice.** A typed extension ships a compiled
 > .NET DLL (`manifest.archetype = "typed"`) with the resource's own controller/route/collection, an Angular
@@ -65,19 +65,20 @@ from a built-in resource (Network, Namespace, …).
 Everything between Phase 1 and Phase 5 is identical in both modes; only the load step (Phase 6) differs.
 Full mechanics: [06-registration](reference/06-registration.md).
 
-> **Getting the working copy.** The dev-kit repo is **PRIVATE**, so a **GitHub scope is required**; its token reaches
-> `gh` (`.config/gh/hosts.yml` + `GH_CONFIG_DIR`), so clone with **`gh repo clone …`** (never an unauthenticated
-> `git clone` of the dev-kit). 🔒 **Never read/print a credentials file** (`cat`/`echo`/`head`/`grep` of `hosts.yml`,
+> **Getting the working copy.** The dev-kit repo (`duplocloud/devkit`) is public: a plain `git clone` works. In-platform
+> the bootstrap has already cloned it (honouring the admin's `spec.devKitRepo`/`spec.devKitBranch`), so work in that
+> copy. The user's own repo (`spec.gitRepo`) needs the **GitHub scope**, whose token reaches `gh`
+> (`.config/gh/hosts.yml` + `GH_CONFIG_DIR`), so clone that one with **`gh repo clone …`**. 🔒 **Never read/print a credentials file** (`cat`/`echo`/`head`/`grep` of `hosts.yml`,
 > `.aws/credentials`, …) — to verify GitHub auth use **`gh auth status`**, never `cat hosts.yml`.
 > - **`spec.gitRepo` set (user's own repo):** `gh repo clone <orgName>/<name> repo` (with `-b <branch>`). If the repo
 >   is **EMPTY**, overlay the dev-kit's content EXCEPT `.git` so the user repo keeps its own `.git`/ownership:
->   `gh repo clone duplocloud/devkit /tmp/devkit && rsync -a --exclude=.git /tmp/devkit/ repo/`.
+>   `git clone https://github.com/duplocloud/devkit /tmp/devkit && rsync -a --exclude=.git /tmp/devkit/ repo/`.
 >   If it **already has** dev-kit content, just work in it — but **enumerate first**: `ls extensions/*/manifest.json`.
 >   Other developers' extensions may live beside yours; the requirement decides whether you MODIFY an existing
 >   `extensions/<name>/` or scaffold a NEW `extensions/<name2>/` (ask when ambiguous), and before scaffolding new,
 >   read a sibling to match its conventions. **Hot-load is on-demand**, **push is user-initiated only**
 >   (chat or the result-page badge); prompt to **commit**/**resync** and report `result.gitStatus` after each git op.
-> - **No `spec.gitRepo`:** `gh repo clone duplocloud/devkit` and work in it (throwaway, hot-load only).
+> - **No `spec.gitRepo`:** work in the dev-kit copy (throwaway, hot-load only).
 > - **Local (human-cloned):** you already cloned the dev-kit. First time, run `./scripts/change_git_owner.sh <your-repo>`
 >   to adopt it; if your repo already has dev-kit content, just work in it.
 >
@@ -265,7 +266,7 @@ In a **clone-and-own repo** (adopted via `scripts/change_git_owner.sh` or `scrip
 extension lives in its own **`extensions/<name>/`** dir. Scaffold from the bundled template (skip if a starter was
 already seeded — then adapt what's there):
 ```bash
-[ -d "extensions/<name>" ] || cp -r "$(dirname "$0")/templates/helloworld" "extensions/<name>"
+[ -d "extensions/<name>" ] || cp -r ".claude/skills/duplo-extension-dev/templates/helloworld" "extensions/<name>"
 ```
 (In-platform inside a provisioning ticket, scaffold into the ticket workdir instead — same steps, different dir.)
 
