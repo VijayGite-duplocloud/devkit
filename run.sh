@@ -767,6 +767,21 @@ prompt() { # var label [secret]
   printf -v "$1" '%s' "$(strip_term_noise "$__v")"
   return "$__rc"
 }
+# A new admin password is typed blind and the database keeps whatever the first run stores (a later
+# .env edit can't change it), so a typo here locks the user out until ./run.sh --reset. Ask twice and
+# require a match; refuse empty. Both entries go through prompt(), so both are sanitized identically.
+# EOF (no tty, Ctrl-D) returns non-zero instead of looping forever.
+prompt_new_password() { # var label
+  local __p1 __p2
+  while :; do
+    prompt __p1 "$2" secret || return
+    [ -n "$__p1" ] || { echo "  Password cannot be empty." >&2; continue; }
+    prompt __p2 "Confirm $2" secret || return
+    [ "$__p1" = "$__p2" ] && break
+    echo "  Passwords do not match — try again." >&2
+  done
+  printf -v "$1" '%s' "$__p1"
+}
 # ── resolve a value: flag > .env > prompt ─────────────────────────────────────
 resolve() { # flagval envkey label [secret]
   local cur="$1" envkey="$2" label="$3" secret="${4-}"
@@ -982,7 +997,13 @@ if [ -z "$LIC" ]; then
 fi
 # (END LICENSE BLOCK)
 
-PASSWORD="$(resolve "$F_PASSWORD" Authentication__LocalAdminPassword 'Admin password' secret)"
+# Not resolve(): a password typed here is new (flag and .env are both empty), so it is confirmed.
+# --password and an existing .env value are taken as-is, exactly as before.
+PASSWORD="$F_PASSWORD"; [ -z "$PASSWORD" ] && PASSWORD="$(getenv Authentication__LocalAdminPassword)"
+if [ -z "$PASSWORD" ]; then
+  [ "$NONINTERACTIVE" = 1 ] && { echo "Missing Authentication__LocalAdminPassword — pass --password (non-interactive)." >&2; exit 1; }
+  prompt_new_password PASSWORD 'Admin password' || { echo "No password provided — re-run with --password <pw>." >&2; exit 1; }
+fi
 MODEL="$F_MODEL"; [ -z "$MODEL" ] && MODEL="$(getenv DEVKIT_MODEL)"
 if [ -z "$MODEL" ]; then
   [ "$NONINTERACTIVE" = 1 ] && { echo "Missing DEVKIT_MODEL — pass --model 1|2|3|4|5|anthropic|bedrock|gateway|bedrock-instance-role|subscription." >&2; exit 1; }
