@@ -9,8 +9,10 @@ per build, uploads it and registers it with the console in one run. The action's
 the rules it enforces. This page covers what that run does, in any organization, and the extra steps that
 apply only inside DuploCloud's own organizations, `duplocloud` and `duplocloud-internal`.
 
-Only one release run executes for a repository at a time. A run that starts while another is still in
-flight queues behind it rather than overlapping or being canceled mid-write.
+Only one release run executes per side of a repository at a time, one for `main` and one for `dev` and `rc`
+together. A run that starts while another on its side is still in flight queues behind it rather than
+overlapping or being canceled mid-write; a `main` run and a `dev` run can overlap, since they share no console,
+bucket or tag.
 
 ## What a release produces
 
@@ -184,10 +186,16 @@ organization variables:
 | `CONSOLE_SIGNING_CERT` | Organization variable | The publisher's certificate. The same value for every repository |
 | `EXTENSION_PUBLISHER_ROLE_ARN` | Organization variable | The AWS role the workflow assumes, by name, to write to the channels bucket |
 | `ARMDOT_LICENSE_KEY` | Organization secret | Base64 of DuploCloud's ArmDot license file. The reusable release action decodes it to the file `build-extension.sh` reads, so every build it runs obfuscates |
+| `RELEASE_BOT_GITHUB_TOKEN` | Organization secret, granted per repository | A token that reads the private repository holding the ArmDot build files, which the action fetches before a licensed build |
+| `CONSOLE_DEV_API_KEY` | Secret, granted per repository | The dev console's API key, used on `dev` and `rc` in place of `CONSOLE_API_KEY` |
+| `CONSOLE_DEV_SIGNING_KEY` | Secret, granted per repository | The dev console publisher's private key PEM, used on `dev` and `rc` |
+| `CONSOLE_DEV_SIGNING_CERT` | Organization variable | The dev console publisher's certificate |
+| `CONSOLE_DEV_URL` | Repository variable, optional | The dev console's URL. Defaults to `https://dev-console.prod-apps.duplocloud.net` |
+| `BUNDLE_BUCKET_NONPROD` | Repository variable, optional | The non-prod bundle bucket `dev` and `rc` builds are recorded against. Defaults to `duplo-helpdesk-bundles-nonprod` |
 
-`release.yml` hands all five to the action. In these organizations the action fails the job before the build
-when the signing key, the certificate, the ArmDot license or the console key is missing, rather than ship an
-unsigned, unprotected or unregistered build. `EXTENSION_PUBLISHER_ROLE_ARN` is assumed through GitHub's OIDC
+`release.yml` hands the side's values to the action. In these organizations the action fails the job before the
+build when the signing key, the certificate, the ArmDot license, the bot token or the console key is missing,
+rather than ship an unsigned, unprotected or unregistered build. `EXTENSION_PUBLISHER_ROLE_ARN` is assumed through GitHub's OIDC
 token (`permissions: id-token: write`) before the action runs, and only a repository the role's trust list
 names can assume it, so a repository outside that list fails at the credentials step, before anything is built.
 
