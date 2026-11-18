@@ -253,18 +253,15 @@ the flow needs both, and the release job says which is missing before the build.
 
 ### The host's SDK line
 
-A host on extension SDK 1.2 or later ships `net10.0` reference assemblies only. Today the devkit still builds
-for `net8.0`: the SDK baseline project `build-extension.sh` writes, the sample project files and the builder
-image in `build/Dockerfile.builder`, which ships the .NET 8 SDK, all say so, and a repository pointed at a 1.2
-host fails its build with NETSDK1045. [devkit#78](https://github.com/duplocloud/devkit/pull/78) is the change
-that moves it: the build picks the target framework from the host's SDK version and passes it to restore and
-publish, so a project file that names `net8.0` builds `net10.0` against a 1.2 host without an edit, the
-baseline project follows the same rule, and the builder image moves to the .NET 10 SDK, which still builds
-`net8.0` for a host on 1.0 or 1.1. Once it is on the branch you upgrade from, step 3 brings it. Until then a
-repository that has to build against a 1.2 host needs the two changes itself: `<TargetFramework>` set to
-`net10.0` (or chosen by a condition on `DuploSdkVersion`, the way the Cost Intelligence extension does it) in
-its project file, and `build/Dockerfile.builder` on `mcr.microsoft.com/dotnet/sdk:10.0-noble`, built locally
-and named through `BUILDER_IMAGE` since the shared image on quay.io is still the .NET 8 one.
+A host on extension SDK 1.2 or later ships `net10.0` reference assemblies only. On `dev` the build picks the
+target framework from the host's SDK version and passes it to restore and publish, so a project file that
+names `net8.0` builds `net10.0` against a 1.2 host without an edit, and a `net8.0` build for a host on 1.0 or 1.1
+loads on both. [upgrading.md](upgrading.md#net-10-and-the-target-framework) has the detail. What a release
+still waits on is the toolchain the build runs in: the image pinned by digest in `scripts/_builder.sh` and
+`docker-compose.yml` has to ship the .NET 10 SDK, or the build stops before publishing and names the SDK it
+found. That pin moves in its own change once the image is published, and `release.yml` sets no
+`BUILDER_IMAGE`, so until the pin on the branch you upgrade from names a .NET 10 image, a release against a
+1.2 host fails there.
 
 ## The channels bucket and the license server
 
