@@ -66,7 +66,8 @@ On an EC2 host the provider prompt first probes whether the instance role can ac
 5. Obtains a license for that address if `Licensing__Token` is empty — see
    [configuration.md § Licensing](configuration.md#licensing). This is where a run can wait on you: the
    license server emails the address a link, and the run polls for up to 2 minutes after it is clicked.
-6. Resolves password and LLM provider: flag, then `.env`, then prompt.
+6. Resolves password and LLM provider: flag, then `.env`, then prompt. A prompted password is asked
+   twice and must match (and be non-empty); a `--password` flag or `.env` value is used as-is.
 7. Generates `Encryption__MasterKey`, `Authentication__JwtSharedSecret`, `MONGO_ROOT_PASSWORD` and `Agent__ApiAuthToken`
    once, if unset.
    A run that would generate the mongo password over a data volume initialised before the key existed stops
