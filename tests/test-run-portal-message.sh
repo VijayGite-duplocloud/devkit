@@ -16,9 +16,31 @@ t "run.sh is syntactically valid and defines portal_open_message"
 if bash -n run.sh 2>/dev/null && grep -q '^portal_open_message() {' run.sh; then ok
 else bad "missing/syntax error"; exit 1; fi
 
-t "PORTAL_URL comes from Authentication__FrontendBaseUrl, falling back to localhost:UI_PORT"
-if grep -q 'PORTAL_URL="$(getenv Authentication__FrontendBaseUrl)"' run.sh \
-   && grep -q '\[ -n "$PORTAL_URL" \] || PORTAL_URL="http://localhost:$UI_PORT"' run.sh; then ok; else bad "PORTAL_URL source"; fi
+t "PORTAL_URL comes from portal_url(Authentication__FrontendBaseUrl, UI_PORT)"
+if grep -q '^portal_url() {' run.sh \
+   && grep -q 'PORTAL_URL="$(portal_url "$(getenv Authentication__FrontendBaseUrl)" "$UI_PORT")"' run.sh; then ok; else bad "PORTAL_URL source"; fi
+
+# getenv always succeeds, so `$(getenv UI_PORT || echo 4200)` never falls back and could store
+# "http://localhost:" (PR #87 review). The write must check for a blank UI_PORT explicitly.
+t "the FrontendBaseUrl default write can't store a port-less http://localhost:"
+if ! grep -q 'getenv UI_PORT 2>/dev/null || echo' run.sh \
+   && grep -q 'FB_PORT="$(getenv UI_PORT)"; \[ -n "$FB_PORT" \] || FB_PORT=4200' run.sh \
+   && grep -q 'setenv Authentication__FrontendBaseUrl "http://localhost:$FB_PORT"' run.sh; then ok; else bad "FrontendBaseUrl default write"; fi
+
+eval "$(awk '/^portal_url\(\) \{/,/^}/' run.sh)"
+echo "portal_url() — localhost follows UI_PORT, any other host is kept (PR #87 review):"
+pu() { # stored port expected label
+  t "$4"
+  local got; got="$(portal_url "$1" "$2")"
+  if [ "$got" = "$3" ]; then ok; else bad "portal_url '$1' '$2' → '$got' (expected '$3')"; fi
+}
+pu ""                            4310 "http://localhost:4310"    "empty stored value → localhost:UI_PORT"
+pu "http://localhost:4210"       4310 "http://localhost:4310"    "stale localhost port after UI_PORT moved → current UI_PORT"
+pu "http://localhost:"           4310 "http://localhost:4310"    "port-less http://localhost: → current UI_PORT"
+pu "http://127.0.0.1:4210"       4310 "http://localhost:4310"    "127.0.0.1 is treated as localhost"
+pu "http://localhost:4210/"      4210 "http://localhost:4210"    "unchanged port, trailing slash → no slash"
+pu "https://devkit.example.com/" 4310 "https://devkit.example.com" "custom host kept as-is, trailing slash trimmed"
+pu "http://10.0.0.5:4210"        4310 "http://10.0.0.5:4210"     "non-localhost IP kept as-is"
 
 t "the banner's UI line shows PORTAL_URL, not a hard-coded localhost"
 if grep -qE '^  UI +\$PORTAL_URL ' run.sh && ! grep -qE '^  UI +http://localhost' run.sh; then ok; else bad "UI line"; fi

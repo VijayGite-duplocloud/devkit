@@ -1043,7 +1043,13 @@ setenv Authentication__LocalAdminPassword "$PASSWORD"
 setenv Authentication__SuperUsers "$EMAIL"
 setenv DEVKIT_MODEL "$MODEL"
 setenv AIStudio__IsMasterDisabled true
-[ -n "$(getenv Authentication__FrontendBaseUrl)" ] || setenv Authentication__FrontendBaseUrl "http://localhost:$(getenv UI_PORT 2>/dev/null || echo 4200)"
+# getenv always succeeds (it ends in `|| true`), so a blank UI_PORT needs an explicit check — an
+# `$(getenv UI_PORT || echo 4200)` fallback never fires and would store "http://localhost:". 4200 is the
+# same blank-UI_PORT default as below and in docker-compose.yml.
+if [ -z "$(getenv Authentication__FrontendBaseUrl)" ]; then
+  FB_PORT="$(getenv UI_PORT)"; [ -n "$FB_PORT" ] || FB_PORT=4200
+  setenv Authentication__FrontendBaseUrl "http://localhost:$FB_PORT"
+fi
 # Stable secrets: generate once; --reset already blanked them so they regenerate on a fresh DB.
 # -d '\r\n', not just '\n': the MSYS2/mingw64 openssl that ships with Git for Windows wraps base64
 # output at 64 chars using CRLF line endings, not bare LF. Stripping only '\n' left a stray '\r'
@@ -1321,10 +1327,19 @@ case "$KB_RC" in
 esac
 
 # ── where to open the portal ──────────────────────────────────────────────────
-# Authentication__FrontendBaseUrl is the configured portal address (it defaults to http://localhost:$UI_PORT
-# above), so a customised host shows up in the banner instead of a localhost link a browser elsewhere can't use.
-PORTAL_URL="$(getenv Authentication__FrontendBaseUrl)"; PORTAL_URL="${PORTAL_URL%/}"
-[ -n "$PORTAL_URL" ] || PORTAL_URL="http://localhost:$UI_PORT"
+# Authentication__FrontendBaseUrl is the configured portal address, so a customised host shows up in the
+# banner instead of a localhost link a browser elsewhere can't use. A stored localhost URL, though, is only
+# ever run.sh's own default (written once, above): it goes stale when UI_PORT is moved — the fix
+# docs/troubleshooting.md gives for a port clash — and is "http://localhost:" on installs whose UI_PORT was
+# blank at that first write. So localhost always follows the current UI_PORT; any other host is shown as-is.
+portal_url() { # stored-FrontendBaseUrl ui-port
+  local u="${1%/}"
+  case "$u" in
+    ''|http://localhost:*|http://127.0.0.1:*) printf 'http://localhost:%s' "$2" ;;
+    *) printf '%s' "$u" ;;
+  esac
+}
+PORTAL_URL="$(portal_url "$(getenv Authentication__FrontendBaseUrl)" "$UI_PORT")"
 # The studio wait above says nothing about the UI container, so check it before telling anyone to open it.
 # Probed on localhost:$UI_PORT — what this machine can reach — whatever address the banner shows. Short and
 # non-fatal: a slow UI gets a warning in the final message, not a failed run.

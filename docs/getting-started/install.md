@@ -181,8 +181,8 @@ Build & deploy your extension (scripts read the target from .env — no DUPLO_BA
     Sign in as <you@yourcompany.com> with the admin password you set.
 ```
 
-The last line is the URL to open. It is `Authentication__FrontendBaseUrl` when you have set one, otherwise
-`http://localhost:$UI_PORT`. If the portal is still starting, a `⚠ The portal isn't answering yet` line
+The last line is the URL to open. It is `http://localhost:$UI_PORT`, following `UI_PORT` if you move it,
+unless you have set `Authentication__FrontendBaseUrl` to another host, which is then shown as-is. If the portal is still starting, a `⚠ The portal isn't answering yet` line
 follows it; give it a minute. Running over SSH, the run also prints the `ssh -L` command that forwards the
 port to your own machine.
 
