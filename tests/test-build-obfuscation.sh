@@ -19,13 +19,13 @@ ROOT="$PWD"
 mkdir -p "$TMP/sdkfeed" && echo pkg > "$TMP/sdkfeed/Duplocloud.AiHelpdesk.Sdk.1.0.6.nupkg"
 ( cd "$TMP/sdkfeed" && zip -q "$TMP/sdk.zip" ./*.nupkg )
 
-# curl: sdk-version answers {"version":"1.0.6"} through -o and -w, sdk-bundle copies the zip above to -o.
+# curl: sdk-version answers {"version":"1.0.6"}, or SDK_STUB_VERSION, through -o and -w; sdk-bundle copies the zip above to -o.
 cat > "$TMP/bin/curl" <<EOF
 #!/usr/bin/env bash
 out=""; url=""
 while [ \$# -gt 0 ]; do case "\$1" in -o) out=\$2; shift ;; http*) url=\$1 ;; esac; shift; done
 case "\$url" in
-  */sdk-version) printf '{"version":"1.0.6"}' > "\$out"; printf 200 ;;
+  */sdk-version) printf '{"version":"%s"}' "\${SDK_STUB_VERSION:-1.0.6}" > "\$out"; printf 200 ;;
   */sdk-bundle)  cp "$TMP/sdk.zip" "\$out" ;;
 esac
 EOF
@@ -35,10 +35,12 @@ EOF
 # bundle ships exactly the extension's DLL. Each line also says whether Directory.Build.targets sat beside the
 # project at publish time, since an obfuscation flag without that import would stamp a bundle ArmDot never touched,
 # and a copy of that file is kept, since the script removes it before the build ends.
-# DOTNET_FAIL_EXT=1 makes the extension publish fail, to exercise cleanup on the failure path.
+# DOTNET_FAIL_EXT=1 makes the extension publish fail, to exercise cleanup on the failure path. --version answers
+# DOTNET_STUB_VERSION, 10.0.404 unless set, and every logged call carries the TargetFramework of the csproj in its cwd.
 cat > "$TMP/bin/dotnet" <<EOF
 #!/usr/bin/env bash
-echo "dotnet \$* targets=\$([ -f Directory.Build.targets ] && echo yes || echo no)" >> "$TMP/calls/dotnet"
+[ "\${1:-}" = --version ] && { echo "\${DOTNET_STUB_VERSION:-10.0.404}"; exit 0; }
+echo "dotnet \$* targets=\$([ -f Directory.Build.targets ] && echo yes || echo no) csproj-tfm=\$(sed -nE 's/.*<TargetFramework>([^<]+)<.*/\\1/p' ./*.csproj 2>/dev/null | head -1)" >> "$TMP/calls/dotnet"
 [ -f Directory.Build.targets ] && cp Directory.Build.targets "$TMP/calls/Directory.Build.targets"
 out=""; prev=""
 for a in "\$@"; do [ "\$prev" = -o ] && out=\$a; prev=\$a; done
@@ -59,7 +61,10 @@ chmod +x "$TMP/bin/curl" "$TMP/bin/dotnet" "$TMP/bin/npm"
 export PATH="$TMP/bin:$PATH"
 
 echo k > "$TMP/lic.key"
-ARMDOT_VERSION="$(sed -nE 's/.*<ArmDotEngineVersion>([^<]+)<.*/\1/p' build/ArmDot.Obfuscation.props)"
+# The ArmDot build files live in duplocloud-internal/.github; the build reads them from DUPLO_ARMDOT_DIR, so a fixture
+# directory with the four file names stands in, and its props pin is what the stamp has to carry.
+ARMDOT_CFG="$ROOT/tests/fixtures/armdot-config"
+ARMDOT_VERSION="$(sed -nE 's/.*<ArmDotEngineVersion>([^<]+)<.*/\1/p' "$ARMDOT_CFG/ArmDot.Obfuscation.props")"
 
 # run_build [env...]: copies the sample into the checkout (the script refuses paths outside it), builds it natively
 # with the given environment, and leaves its exit code in RC and its bundle manifest at $TMP/manifest.json.
@@ -107,7 +112,8 @@ run_build() {
   [ -n "${PRESET_TARGETS:-}" ] && echo "$PRESET_TARGETS" > "$EXT/backend/Directory.Build.targets"
   [ -n "${PRESET_MANIFEST_KEY:-}" ] && jq '.obfuscation = {tool: "armdot", version: "0.0.0"}' samples/helloworld/manifest.json \
     > "$EXT/manifest.json"
-  ( cd "${RUN_FROM:-.}" && env -u ARMDOT_LICENSE_FILE_PATH DUPLO_TARGET=remote DUPLO_HOST=http://stub.invalid DUPLO_TOKEN=t "$@" \
+  ( cd "${RUN_FROM:-.}" && env -u ARMDOT_LICENSE_FILE_PATH DUPLO_TARGET=remote DUPLO_HOST=http://stub.invalid DUPLO_TOKEN=t \
+      DUPLO_ARMDOT_DIR="$ARMDOT_CFG" "$@" \
     "$ROOT/scripts/build-extension.sh" --native "$EXT" ) > "$TMP/build.log" 2>&1
   RC=$?
   [ -f "$EXT/dist/pkg/manifest.json" ] && cp "$EXT/dist/pkg/manifest.json" "$TMP/manifest.json"
@@ -118,7 +124,7 @@ trap 'rm -rf "$TMP"; cleanup_ext' EXIT
 echo "build obfuscation:"
 
 t "the stamp version comes from the props pin"
-[ -n "$ARMDOT_VERSION" ] && ok || bad "no ArmDotEngineVersion in build/ArmDot.Obfuscation.props"
+[ -n "$ARMDOT_VERSION" ] && ok || bad "no ArmDotEngineVersion in $ARMDOT_CFG/ArmDot.Obfuscation.props"
 
 t "plain build: succeeds with no DuploObfuscate=true, no obfuscation key, no targets file left"
 run_build
@@ -128,9 +134,12 @@ run_build
 
 t "licensed build: the extension publish passes DuploObfuscate, ArmDotLicenseFile and DuploDevkitBuildDir"
 run_build ARMDOT_LICENSE_FILE_PATH="$TMP/lic.key"
-want="-p:DuploObfuscate=true -p:ArmDotLicenseFile=$TMP/lic.key -p:DuploDevkitBuildDir=$ROOT/build/"
+want="-p:DuploObfuscate=true -p:ArmDotLicenseFile=$TMP/lic.key -p:DuploDevkitBuildDir=$ARMDOT_CFG/"
 [ "$RC" = 0 ] && grep 'publish Duplo.Extension.HelloWorld.csproj' "$TMP/calls/dotnet" | grep -qF -- "$want" \
   && ok || bad "rc=$RC $(cat "$TMP/calls/dotnet") $(tail -5 "$TMP/build.log")"
+
+t "licensed build: the restore carries the obfuscation properties, so the publish that skips its own restore has the ArmDot packages"
+grep 'restore Duplo.Extension.HelloWorld.csproj' "$TMP/calls/dotnet" | grep -qF -- "$want" && ok || bad "$(cat "$TMP/calls/dotnet")"
 
 t "licensed build: Directory.Build.targets sits beside the csproj while the extension publishes"
 grep 'publish Duplo.Extension.HelloWorld.csproj' "$TMP/calls/dotnet" | grep -q 'targets=yes' && ok || bad "$(cat "$TMP/calls/dotnet")"
@@ -183,7 +192,7 @@ PRESET_TARGETS='<Project/>' run_build ARMDOT_LICENSE_FILE_PATH="$TMP/lic.key"
   && ok || bad "rc=$RC"
 
 t "a leftover Directory.Build.targets identical to the template is treated as ours and the build proceeds"
-PRESET_TARGETS="$(cat build/Directory.Build.targets.template)" run_build ARMDOT_LICENSE_FILE_PATH="$TMP/lic.key"
+PRESET_TARGETS="$(cat "$ARMDOT_CFG/Directory.Build.targets.template")" run_build ARMDOT_LICENSE_FILE_PATH="$TMP/lic.key"
 [ "$RC" = 0 ] && grep 'publish Duplo.Extension.HelloWorld.csproj' "$TMP/calls/dotnet" | grep -q 'targets=yes' \
   && [ ! -f "$EXT/backend/Directory.Build.targets" ] && ok || bad "rc=$RC $(tail -3 "$TMP/build.log")"
 
@@ -206,6 +215,29 @@ t "a stale obfuscation key is replaced by a licensed build"
 PRESET_MANIFEST_KEY=1 run_build ARMDOT_LICENSE_FILE_PATH="$TMP/lic.key"
 got="$(jq -r '.obfuscation.version' "$TMP/manifest.json" 2>/dev/null)"
 [ "$got" = "$ARMDOT_VERSION" ] && ok || bad "$(jq -c .obfuscation "$TMP/manifest.json" 2>&1)"
+
+t "licensed build with a relative DUPLO_ARMDOT_DIR resolves it against the directory the script runs from"
+mkdir -p "$TMP/elsewhere" && rm -rf "$TMP/elsewhere/armdot-rel" && cp -R "$ARMDOT_CFG" "$TMP/elsewhere/armdot-rel"
+RUN_FROM="$TMP/elsewhere" run_build ARMDOT_LICENSE_FILE_PATH="$TMP/lic.key" DUPLO_ARMDOT_DIR=armdot-rel
+[ "$RC" = 0 ] && grep 'publish Duplo.Extension.HelloWorld.csproj' "$TMP/calls/dotnet" | grep -q 'DuploObfuscate=true' \
+  && ok || bad "rc=$RC $(tail -3 "$TMP/build.log")"
+
+t "licensed build with the license in the shell and DUPLO_ARMDOT_DIR only in .env still finds the directory"
+printf 'DUPLO_ARMDOT_DIR=%s\n' "$ARMDOT_CFG" > "$TMP/dotenv"
+run_build ARMDOT_LICENSE_FILE_PATH="$TMP/lic.key" DUPLO_ARMDOT_DIR= DUPLO_ENV_FILE="$TMP/dotenv"
+[ "$RC" = 0 ] && grep 'publish Duplo.Extension.HelloWorld.csproj' "$TMP/calls/dotnet" | grep -q 'DuploObfuscate=true' \
+  && ok || bad "rc=$RC $(tail -3 "$TMP/build.log")"
+
+t "licensed build with no DUPLO_ARMDOT_DIR fails before any dotnet call and names the variable"
+run_build ARMDOT_LICENSE_FILE_PATH="$TMP/lic.key" DUPLO_ARMDOT_DIR=
+[ "$RC" != 0 ] && [ ! -s "$TMP/calls/dotnet" ] && grep -q 'DUPLO_ARMDOT_DIR' "$TMP/build.log" && grep -q 'duplocloud-internal/.github' "$TMP/build.log" \
+  && ok || bad "rc=$RC $(cat "$TMP/calls/dotnet") $(tail -4 "$TMP/build.log")"
+
+t "licensed build whose DUPLO_ARMDOT_DIR lacks a file fails before any dotnet call and names the file"
+mkdir -p "$TMP/partial" && cp "$ARMDOT_CFG/ArmDot.Obfuscation.props" "$TMP/partial/"
+run_build ARMDOT_LICENSE_FILE_PATH="$TMP/lic.key" DUPLO_ARMDOT_DIR="$TMP/partial"
+[ "$RC" != 0 ] && [ ! -s "$TMP/calls/dotnet" ] && grep -q 'missing ArmDot.Obfuscation.targets' "$TMP/build.log" \
+  && ok || bad "rc=$RC $(cat "$TMP/calls/dotnet") $(tail -4 "$TMP/build.log")"
 
 # Only projects under backend/ import the dropped targets file, so a reference that leads outside it would ship a
 # plain assembly in a bundle stamped obfuscated. The Include paths use backslashes, as a csproj written on Windows does.
@@ -274,6 +306,82 @@ PRESET_REF='..\old\Old.csproj' PRESET_REF_COMMENTED=1 run_build ARMDOT_LICENSE_F
 t "the refusal says to exclude the moved folder from the entry project's default items"
 PRESET_REF='..\shared\Shared.csproj' run_build ARMDOT_LICENSE_FILE_PATH="$TMP/lic.key"
 grep -q 'DefaultItemExcludes' "$TMP/build.log" && ok || bad "$(tail -4 "$TMP/build.log")"
+
+echo "target framework follows the host SDK:"
+
+t "host SDK 1.0.6: restore and publish both carry net8.0, and publish skips its own restore"
+run_build
+[ "$RC" = 0 ] && grep -q 'restore Duplo.Extension.HelloWorld.csproj.*-p:TargetFramework=net8.0' "$TMP/calls/dotnet" \
+  && grep 'publish Duplo.Extension.HelloWorld.csproj' "$TMP/calls/dotnet" | grep -q -- '--no-restore.*-p:TargetFramework=net8.0' \
+  && ok || bad "rc=$RC $(cat "$TMP/calls/dotnet")"
+
+t "host SDK 1.2.0: the extension builds for net10.0"
+SDK_STUB_VERSION=1.2.0 run_build
+[ "$RC" = 0 ] && grep 'publish Duplo.Extension.HelloWorld.csproj' "$TMP/calls/dotnet" | grep -q -- '-p:TargetFramework=net10.0' \
+  && ok || bad "rc=$RC $(cat "$TMP/calls/dotnet")"
+
+t "host SDK 1.10.0 compares as a number, not a string, so it builds for net10.0"
+SDK_STUB_VERSION=1.10.0 run_build
+[ "$RC" = 0 ] && grep 'publish Duplo.Extension.HelloWorld.csproj' "$TMP/calls/dotnet" | grep -q -- '-p:TargetFramework=net10.0' \
+  && ok || bad "rc=$RC $(cat "$TMP/calls/dotnet")"
+
+t "a prerelease host SDK 1.2.0-rc.1 builds for net10.0"
+SDK_STUB_VERSION=1.2.0-rc.1 run_build
+[ "$RC" = 0 ] && grep 'publish Duplo.Extension.HelloWorld.csproj' "$TMP/calls/dotnet" | grep -q -- '-p:TargetFramework=net10.0' \
+  && ok || bad "rc=$RC $(cat "$TMP/calls/dotnet")"
+
+t "the host-provided baseline project targets the same framework as the extension"
+SDK_STUB_VERSION=1.2.0 run_build
+[ "$RC" = 0 ] && grep 'publish _sdkbaseline.csproj' "$TMP/calls/dotnet" | grep -q 'csproj-tfm=net10.0' \
+  && ok || bad "rc=$RC $(cat "$TMP/calls/dotnet")"
+
+t "the build log names the target framework beside the host SDK version"
+grep -q 'target framework: net10.0' "$TMP/build.log" && ok || bad "$(grep -i 'sdk version\|framework' "$TMP/build.log")"
+
+t "a .NET 8 toolchain is refused before any publish when the SDK needs net10.0, naming the toolchain"
+DOTNET_STUB_VERSION=8.0.128 SDK_STUB_VERSION=1.2.0 run_build
+[ "$RC" != 0 ] && ! grep -q 'publish' "$TMP/calls/dotnet" && grep -q 'NET SDK 10' "$TMP/build.log" \
+  && ok || bad "rc=$RC $(tail -4 "$TMP/build.log")"
+
+t "a .NET 8 toolchain still builds for a host SDK that needs net8.0"
+DOTNET_STUB_VERSION=8.0.128 run_build
+[ "$RC" = 0 ] && grep 'publish Duplo.Extension.HelloWorld.csproj' "$TMP/calls/dotnet" | grep -q -- '-p:TargetFramework=net8.0' \
+  && ok || bad "rc=$RC $(tail -4 "$TMP/build.log")"
+
+echo "the framework rule in the sources:"
+
+S=.claude/skills/duplo-extension-dev
+t "every sample and template backend picks its framework from the SDK version, net8.0 below 1.2.0 and net10.0 from it"
+missing=""
+for f in samples/*/backend/*.csproj $S/templates/helloworld/backend/*.csproj; do
+  grep -qF "VersionLessThan('\$(DuploSdkVersion)', '1.2.0'))\">net8.0</TargetFramework>" "$f" \
+    && grep -qF "'\$(TargetFramework)' == ''\">net10.0</TargetFramework>" "$f" \
+    && ! grep -q '<TargetFramework>net8.0</TargetFramework>' "$f" \
+    && [ "$(grep -n 'DuploSdkVersion Condition' "$f" | head -1 | cut -d: -f1)" -lt "$(grep -n 'VersionLessThan' "$f" | head -1 | cut -d: -f1)" ] \
+    || missing="$missing $f"
+done
+[ -z "$missing" ] && ok || bad "$missing"
+
+t "every sample and template csproj is well-formed XML, since a comment holding -- stops MSBuild loading it"
+missing=""
+for f in samples/*/backend/*.csproj $S/templates/helloworld/backend/*.csproj tests/fixtures/armdot-probe/Probe.csproj; do
+  python3 -c 'import sys, xml.dom.minidom; xml.dom.minidom.parse(sys.argv[1])' "$f" 2>/dev/null || missing="$missing $f"
+done
+[ -z "$missing" ] && ok || bad "$missing"
+
+t "the manual publish steps restore first and pass the framework property, as the script does"
+missing=""
+for f in $S/SKILL.md $S/templates/helloworld/README.md $S/reference/02-authoring-guide.md $S/reference/06-registration.md; do
+  grep -q 'dotnet restore' "$f" && grep -q -- '--no-restore' "$f" && grep -q 'p:TargetFramework' "$f" && grep -q '1\.2\.0' "$f" \
+    || missing="$missing $f"
+done
+[ -z "$missing" ] && ok || bad "$missing"
+
+t "the network-stack sample takes AWSSDK.EC2 from the SDK feed rather than pinning its own"
+grep -q 'AWSSDK.EC2" Version=' samples/network-stack/backend/Duplo.Extension.NetworkStack.csproj && bad "pin still present" || ok
+
+t "upgrading.md tells an existing project what the framework rule means for it"
+grep -q '^## .*\.NET 10' docs/upgrading.md && sed -n '/^## .*\.NET 10/,/^## /p' docs/upgrading.md | grep -q '1\.2\.0' && ok || bad "docs/upgrading.md"
 
 echo "passed $PASS, failed $FAIL"
 [ "$FAIL" -eq 0 ]
