@@ -7,7 +7,7 @@ import { StatusBadgeComponent } from '../shared/status-badge.component';
 
 // List view — copied from templates/helloworld's list-hello.component.ts, columns swapped to this
 // resource's own fields. Deliberately NO password column: the list response never carries the value
-// (reference/21-secrets.md), so there is nothing to show — not even masked.
+// (reference/23-secrets.md), so there is nothing to show — not even masked.
 @Component({
   selector: 'sf-list',
   imports: [SearchableDatatableModule, StatusBadgeComponent],
@@ -80,7 +80,7 @@ export class ListSecretFieldServiceAccountComponent implements OnInit {
   private readonly filterTerm = signal('');
 
   // Plain string fields or dot-paths only — searchByFields uses lodash `get`; no method calls. `password`
-  // is intentionally absent: it's never on `spec` to begin with (reference/21-secrets.md), and even if it
+  // is intentionally absent: it's never on `spec` to begin with (reference/23-secrets.md), and even if it
   // were, a secret field has no business being searchable/indexable client-side.
   private readonly searchFields = ['name', 'status', 'spec.username', 'result.accountId'];
 

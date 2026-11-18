@@ -19,7 +19,7 @@ const REST_SEGMENT = 'extensions/secret-field-service-accounts';
 // NOTE what's deliberately ABSENT from `spec` here: there is no `password` field on this interface.
 // That isn't an oversight — the backend's [SecretValue(ExcludeFromResponse = true)] means the GET/List
 // response never carries the real value, so there is nothing for this type to model. See
-// reference/21-secrets.md. `result.accountId` is NOT sensitive (an identifier, not a credential), so it's
+// reference/23-secrets.md. `result.accountId` is NOT sensitive (an identifier, not a credential), so it's
 // modelled normally.
 export interface SecretFieldServiceAccount {
   id: string;
@@ -74,7 +74,7 @@ export class SecretFieldServiceAccountService {
    *
    * `password` is OPTIONAL and must be OMITTED (not sent as `''`) when the user didn't type a new one —
    * the backend hooks treat an absent/blank password as "keep what's stored", never "clear it"
-   * (reference/21-secrets.md). The caller (the add/edit component) is responsible for leaving the key off
+   * (reference/23-secrets.md). The caller (the add/edit component) is responsible for leaving the key off
    * the object entirely rather than passing `password: ''`.
    */
   update(id: string, spec: { username: string; password?: string }): Observable<SecretFieldServiceAccount> {
@@ -83,7 +83,7 @@ export class SecretFieldServiceAccountService {
 
   /**
    * Reveals the real, decrypted password — the one supported way to read it back, gated by the
-   * `secretfield.secret.read` access-control action. See reference/21-secrets.md.
+   * `secretfield.secret.read` access-control action. See reference/23-secrets.md.
    */
   revealPassword(id: string): Observable<string> {
     return this.http.get(`${this.base()}/${id}/password`).pipe(map((r: any) => this.unwrap(r)?.value ?? ''));

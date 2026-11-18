@@ -4,7 +4,7 @@ import { AiDisclosureComponent, FormGroupErrorsComponent, SharedFormsModule } fr
 import { SecretFieldServiceAccountService } from '../secret-field-service-account.service';
 
 // Add/Edit form — see reference/02-authoring-guide.md for the panel-form-accordion layout this mirrors
-// (copied from templates/helloworld's add-hello.component.ts) and reference/21-secrets.md for the ONE
+// (copied from templates/helloworld's add-hello.component.ts) and reference/23-secrets.md for the ONE
 // thing this component demonstrates beyond that template: a write-only password field.
 //
 // The password field uses a plain `<input type="password">` rather than the library's `<password-field>`
@@ -31,7 +31,7 @@ import { SecretFieldServiceAccountService } from '../secret-field-service-accoun
           <h4 class="font-weight-bolder">{{ isEdit ? 'Edit' : 'Create' }} Service Account</h4>
           <p class="panel-content-title-sub-text text-muted">
             Enter a name, username, and password. The provisioning agent never sees the password in
-            plaintext — see reference/21-secrets.md.
+            plaintext — see reference/23-secrets.md.
           </p>
         </div>
 
@@ -57,12 +57,12 @@ import { SecretFieldServiceAccountService } from '../secret-field-service-accoun
                 </form-field>
                 <form-field>
                   <label class="element-label">Password {{ isEdit ? '' : '*' }}</label>
-                  <!-- WRITE-ONLY (reference/21-secrets.md): the GET response never carries the real value
+                  <!-- WRITE-ONLY (reference/23-secrets.md): the GET response never carries the real value
                        (backend: [SecretValue(ExcludeFromResponse = true)]), so on Edit there is nothing to
                        pre-populate. The model starts blank either way; the placeholder communicates that a
                        value IS stored without ever showing it, and the field is required only on Create. -->
                   <!-- minlength=8 matches ISecretRedactionService.AddSecret's MinSecretLength — shorter
-                       values are silently never redacted from streamed agent output (reference/21-secrets.md). -->
+                       values are silently never redacted from streamed agent output (reference/23-secrets.md). -->
                   <input type="password" class="form-control" autocomplete="new-password" name="password"
                          [ngModel]="password()" (ngModelChange)="password.set($event)"
                          [required]="!isEdit" minlength="8"
@@ -145,7 +145,7 @@ export class AddSecretFieldServiceAccountComponent implements OnInit {
     this.saving.set(true);
     // Spec is replaced WHOLESALE by PATCH — always send the FULL spec. `password` is included ONLY when
     // the user actually typed one; an empty string is never sent, so the backend's "absent = keep" rule
-    // (reference/21-secrets.md) leaves the stored password untouched on an edit that doesn't change it.
+    // (reference/23-secrets.md) leaves the stored password untouched on an edit that doesn't change it.
     const spec: { username: string; password?: string } = { ...this.loadedSpec, username: this.username() };
     if (this.password()) {
       spec.password = this.password();

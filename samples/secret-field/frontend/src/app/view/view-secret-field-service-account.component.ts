@@ -9,7 +9,7 @@ import { LifecyclePhase, LifecycleRailComponent, RailFact } from '../shared/life
 
 // Detail view on the Extension Studio's Template-G shell (reference/19-detail-page.md), copied from
 // templates/helloworld's view-hello.component.ts. The one addition is the eye icon on the Password
-// tile — the frontend half of reference/21-secrets.md's reveal-endpoint recipe: the real value is
+// tile — the frontend half of reference/23-secrets.md's reveal-endpoint recipe: the real value is
 // fetched on demand, shown inline in the SAME tile, and cleared back to masked on toggle or navigation
 // — never cached anywhere longer than that.
 @Component({
@@ -72,7 +72,7 @@ import { LifecyclePhase, LifecycleRailComponent, RailFact } from '../shared/life
                   </div>
                   <!-- The ONE place the real password ever reaches the browser — fetched on demand,
                        shown inline here, cleared back to masked on toggle. Gated server-side by the
-                       separately-grantable secretfield.secret.read action. See reference/21-secrets.md. -->
+                       separately-grantable secretfield.secret.read action. See reference/23-secrets.md. -->
                   <div class="g-tile">
                     <div class="g-tl">Password</div>
                     <span class="g-tv">

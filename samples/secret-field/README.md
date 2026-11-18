@@ -1,6 +1,6 @@
 # secret-field — a password-bearing resource
 
-Worked reference for **[reference/21-secrets.md](../../.claude/skills/duplo-extension-dev/reference/21-secrets.md)**:
+Worked reference for **[reference/23-secrets.md](../../.claude/skills/duplo-extension-dev/reference/23-secrets.md)**:
 a `SecretFieldServiceAccount` resource whose Spec carries a `Password` the user chooses — an inherent
 attribute of the resource itself, not a credential for calling some other system (that's a
 Scope/Credential, [07-scope-credentials.md](../../.claude/skills/duplo-extension-dev/reference/07-scope-credentials.md)).
@@ -10,8 +10,9 @@ Built from `templates/helloworld`; every change beyond the rename is secrets-rel
 
 This sample's hooks require `IMongoEncryptionProvider` and `ISecretRedactionService` to be resolvable
 inside the extension's own DI container — only true on a host build that includes duplo-ai-helpdesk #734
-(`HostServiceBridge.HostSingletons`). That change didn't bump the SDK's `VERSION`, so the build-time SDK
-check can't detect a host that's missing it. On such a host, loading this extension fails with:
+(`HostServiceBridge.HostSingletons`). Devkit's own default `STUDIO_TAG` (`.env.example`) now points to a
+host build that includes it, so a fresh local stack works out of the box. If you're pointed at a different
+or older host build (`main`, or anything that predates #734), loading this extension fails with:
 
     Unable to resolve service for type 'Duplo.Ai.DataManagement.Encryption.IMongoEncryptionProvider' while
     attempting to activate 'Duplo.Extension.SecretField.SecretFieldServiceAccountHooks'.

@@ -6,7 +6,7 @@ set -euo pipefail
 # and write the result back via the resource's OWN REST route. Status and results are two separate APIs.
 #
 # The password NEVER appears on this script's stdout/stderr and is never assigned to a variable that
-# outlives the one block that uses it — see reference/21-secrets.md and this skill's SKILL.md.
+# outlives the one block that uses it — see reference/23-secrets.md and this skill's SKILL.md.
 
 SPEC_FILE="shared/secret-field-service-account.json"
 SECRETS_FILE="shared/secret-field-service-account.secrets.json"

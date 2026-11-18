@@ -14,12 +14,12 @@ using MongoDB.Bson.Serialization.Attributes;
 
 namespace Duplo.Extension.SecretField;
 
-// Worked reference for reference/21-secrets.md: a resource whose Spec carries a password the USER
+// Worked reference for reference/23-secrets.md: a resource whose Spec carries a password the USER
 // chooses for the external service account this resource represents — not a credential for THIS
 // extension to call some other system (that would be a Scope/Credential, see
 // reference/07-scope-credentials.md), but an inherent attribute of the resource itself, same category
 // as an RDS master password or a VM admin password. This sample exercises, end to end, every layer
-// reference/21-secrets.md describes:
+// reference/23-secrets.md describes:
 //   1. [SecretValue(ExcludeFromResponse = true)] — dropped from every GET/List/Create/Update/PATCH response.
 //   2. [AgentSecretValue]                        — dropped from shared/secret-field-service-account.json
 //                                                   (what the agent Reads); the real value instead goes to
@@ -52,7 +52,7 @@ public class SecretFieldServiceAccountSpec : BaseSpec
     /// <c>jq</c> — never with the Read tool. To retrieve the real value after creation, use
     /// <c>SecretFieldServiceAccountsController.RevealPassword</c> (<c>GET {id}/password</c>, gated by the
     /// separately-grantable <c>secretfield.secret.read</c> action) — never add a second, unguarded way to
-    /// read this field back. See reference/21-secrets.md.
+    /// read this field back. See reference/23-secrets.md.
     /// </para>
     /// </summary>
     [SecretValue(ExcludeFromResponse = true)]
@@ -84,7 +84,7 @@ public class SecretFieldServiceAccount : ResourceBase<SecretFieldServiceAccountS
 /// Encrypts/decrypts <see cref="SecretFieldServiceAccountSpec.Password"/> at the BSON boundary and
 /// registers the plaintext with <see cref="ISecretRedactionService"/> whenever it's in hand — the exact
 /// recipe the platform's own password-bearing resources use (Azure VM, Azure Postgres Flexible Server,
-/// AWS RDS). See reference/21-secrets.md for why each call below is where it is.
+/// AWS RDS). See reference/23-secrets.md for why each call below is where it is.
 /// </summary>
 public class SecretFieldServiceAccountHooks
     : ResourceHooksBase<SecretFieldServiceAccount, SecretFieldServiceAccountSpec, SecretFieldServiceAccountResult>
@@ -149,7 +149,7 @@ public class SecretFieldServiceAccountHooks
     }
 
     /// <summary>
-    /// PATCH semantics (reference/04-hooks.md: spec is replaced wholesale, reference/21-secrets.md: don't
+    /// PATCH semantics (reference/04-hooks.md: spec is replaced wholesale, reference/23-secrets.md: don't
     /// let an edit silently wipe the secret) — a blank/absent password in the incoming spec means "keep
     /// what's stored", never "clear it". Only a genuinely new, non-empty PLAINTEXT value is registered
     /// for redaction and encrypted.
@@ -260,7 +260,7 @@ public class SecretFieldServiceAccountService
     /// this field back, since <see cref="SecretFieldServiceAccountSpec.Password"/> is
     /// <c>[SecretValue(ExcludeFromResponse = true)]</c> and never appears in any other response. Backs
     /// <c>SecretFieldServiceAccountsController.RevealPassword</c>, gated by the
-    /// <c>secretfield.secret.read</c> access-control action. See reference/21-secrets.md.
+    /// <c>secretfield.secret.read</c> access-control action. See reference/23-secrets.md.
     /// </summary>
     /// <exception cref="KeyNotFoundException">No account with this id.</exception>
     /// <exception cref="InvalidOperationException">No password is stored, or it failed to decrypt.</exception>

@@ -1,7 +1,7 @@
 {
   "name": "duplo-extension-secretfield-remote",
   "version": "0.1.0",
-  "description": "Secret Field sample extension — Angular Native-Federation remote (list/add/view). Worked reference for reference/21-secrets.md.",
+  "description": "Secret Field sample extension — Angular Native-Federation remote (list/add/view). Worked reference for reference/23-secrets.md.",
   "scripts": {
     "build": "ng build --configuration production"
   },

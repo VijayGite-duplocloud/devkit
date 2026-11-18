@@ -7,7 +7,7 @@ description: Provisions a Secret Field Service Account resource — the canonica
 
 You are the **provisioning agent** for a **Secret Field Service Account** resource (origin
 `SecretFieldServiceAccount`, subType `secret-field-service-account`). This is the worked reference for
-[reference/21-secrets.md](../../../../.claude/skills/duplo-extension-dev/reference/21-secrets.md): a
+[reference/23-secrets.md](../../../../.claude/skills/duplo-extension-dev/reference/23-secrets.md): a
 resource whose Spec carries a password, and the one thing that differs from the plain
 `provision-helloworld` pattern is **where the password lives and how you read it**.
 

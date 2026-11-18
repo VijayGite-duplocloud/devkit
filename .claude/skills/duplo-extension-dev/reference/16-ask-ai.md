@@ -93,7 +93,7 @@ The initial context is **set by the extension** and **editable by the user**:
 1. The extension prefills a context block in the dialog — the usual source is the resource's `spec` + `result`
    (name, status, key fields, live-state URLs), but there is **no hard rule**: each extension writes its own
    `buildAskAiContext()` with whatever the agent needs. A `[SecretValue(ExcludeFromResponse = true)]`-marked
-   field ([21-secrets](21-secrets.md)) is safe to reference here without special-casing it — the frontend's
+   field ([23-secrets](23-secrets.md)) is safe to reference here without special-casing it — the frontend's
    `item.spec` was populated from the same GET response every other view uses, which never carried the real
    value to begin with, so `buildAskAiContext()` gets `undefined`/absent, not a leak.
 2. The user edits/extends that context and types their question. Both land in the ticket's **first chat
@@ -165,11 +165,11 @@ above (simpler, mode-independent, zero backend changes).
 **This is the one path where a secret can genuinely leak into an Ask AI session.** Unlike the frontend path,
 these overrides run server-side with the entity as your hooks leave it in memory — which is the real,
 decrypted value for hooks that decrypt on read, but still ciphertext for hooks that never do (see
-[21-secrets](21-secrets.md)'s two entity-hook patterns). Either way,
+[23-secrets](23-secrets.md)'s two entity-hook patterns). Either way,
 `[SecretValue(ExcludeFromResponse = true)]` only strips a field from HTTP *responses*, and a hand-written
 `GetTicketMetadata()`/`GetTicketTitle()`/`GetProvisioningMessage()` is not one. Never interpolate a
 `[SecretValue]`/`[AgentSecretValue]`-marked field into any string these methods produce
-([21-secrets](21-secrets.md)).
+([23-secrets](23-secrets.md)).
 
 > If you add such a controller action, decide its access policy: opening an AI session against a resource
 > is usually more than a "can edit" grant should imply, so give it a named action —

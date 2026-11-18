@@ -12,7 +12,7 @@ namespace Duplo.Extension.SecretField;
 /// The extension's own workspace-scoped REST controller. Inheriting
 /// <see cref="ResourcesController{T,TSpec,TResult}"/> provides the full CRUD surface plus
 /// <c>POST {id}/results</c>, <c>POST {id}/status</c> and the deprovision lifecycle. The one addition
-/// beyond a plain scaffold is <see cref="RevealPassword"/> — see reference/21-secrets.md.
+/// beyond a plain scaffold is <see cref="RevealPassword"/> — see reference/23-secrets.md.
 /// </summary>
 [ApiController]
 [Route("v1/aiservicedesk/user/data/workspaces/{workspaceId}/environment/extensions/secret-field-service-accounts")]
@@ -39,7 +39,7 @@ public class SecretFieldServiceAccountsController
     // reason: the user who owns this service account needs the real password to actually use it, and
     //   there is no other way to retrieve it. Scoped to this one explicit, separately-permissioned
     //   action — gated apart from ordinary resource-read access via secretfield.secret.read. Never
-    //   returned from any other endpoint. See reference/21-secrets.md.
+    //   returned from any other endpoint. See reference/23-secrets.md.
 
     /// <summary>
     /// Reveals the real, decrypted password. <see cref="SecretFieldServiceAccountSpec.Password"/> is

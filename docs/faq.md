@@ -67,9 +67,9 @@ Yes. Set `DUPLO_TARGET=remote` with `DUPLO_HOST` and `DUPLO_TOKEN` (an Administr
 
 - **ARM Macs (Apple Silicon)** — yes. The studio image is amd64-only and runs under emulation;
   `STUDIO_PLATFORM=linux/amd64` in `.env.example` handles this. Expect it to be slower than native.
-- **Windows and WSL** — not verified. Docker Compose v2 and `python3` are the only hard requirements and
-  the scripts are POSIX shell, so WSL2 is the likely path, but nobody has confirmed it end to end. If you
-  try it, please say how it went.
+- **Windows and WSL** — use WSL 2 with Ubuntu and run everything from inside it. Docker Compose v2 and
+  `python3` are the only hard requirements and the scripts are POSIX shell. See
+  [Windows: set up WSL](getting-started/windows-wsl.md).
 
 ### What are the prerequisites?
 
@@ -79,10 +79,20 @@ machine, because the build runs in a container. See [Prerequisites](getting-star
 
 ### Do I need .NET and Node installed to build an extension?
 
-No. `./scripts/build-extension.sh` runs the build inside a toolchain container that ships .NET SDK 8 and
+No. `./scripts/build-extension.sh` runs the build inside a toolchain container that ships .NET SDK 10 and
 Node 22, and starts it for you; the first build pulls that image, or builds it locally from
 `build/Dockerfile.builder` if the pull fails. If you already have a toolchain and would rather use it, pass
 `--native` or set `DUPLO_BUILD_NATIVE=1`.
+
+### Which .NET version does my extension build for?
+
+Whichever the host it builds against needs. The build reads the host's SDK version and picks the target
+framework from it: SDK 1.2.0 and later moved the host to .NET 10, so those builds target `net10.0`, and an
+older SDK gives `net8.0`. The framework is passed to the build as a property, so the `net8.0` in your csproj
+is only what an IDE opens the project with, and nothing in the extension changes when a host moves. A
+`net10.0` build does not load on a .NET 8 host, and the installer matches builds to hosts by SDK version, so
+a host only ever receives a build it can load. The .NET 10 SDK builds both, and a build that needs a newer
+SDK than the toolchain ships stops before publishing and says which.
 
 ### Will this clash with a DuploCloud platform I already run locally?
 
