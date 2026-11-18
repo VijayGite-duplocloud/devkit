@@ -45,8 +45,9 @@ DuploCloud beyond that key.
 A push to `main` releases to the prod console and the prod bucket. In DuploCloud's organizations a push to `dev` or
 `rc` releases the same way to the non-prod side: the dev console at `https://dev-console.prod-apps.duplocloud.net`
 and the non-prod bundle bucket, which dev and RC portals install from through the dev license server. The run is the
-same action with a different console, different keys and a channel. The repository variables `CONSOLE_DEV_URL` and
-`BUNDLE_BUCKET_NONPROD` override those two defaults, the way `CONSOLE_URL` and `BUNDLE_BUCKET` do on `main`. Outside
+same action with a different console, different keys and a channel. The repository variable `CONSOLE_DEV_URL`
+overrides the console default, the way `CONSOLE_URL` does on `main`; the bucket is not an input on this side, since
+the upload goes through a URL the dev console issues and lands where that console's grant points. Outside
 DuploCloud's organizations a push to `dev` or `rc` runs nothing, since the console it would reach is DuploCloud's.
 
 The channel keeps the two sides apart on GitHub. A dev build is tagged `<slug>-dev-v<version>-sdk-<sdkVersion>` (an RC
@@ -194,7 +195,6 @@ organization variables:
 | `CONSOLE_DEV_SIGNING_KEY` | Secret, granted per repository | The dev console publisher's private key PEM, used on `dev` and `rc` |
 | `CONSOLE_DEV_SIGNING_CERT` | Organization variable | The dev console publisher's certificate |
 | `CONSOLE_DEV_URL` | Repository variable, optional | The dev console's URL. Defaults to `https://dev-console.prod-apps.duplocloud.net` |
-| `BUNDLE_BUCKET_NONPROD` | Repository variable, optional | The non-prod bundle bucket `dev` and `rc` builds are recorded against. Defaults to `duplo-helpdesk-bundles-nonprod` |
 
 `release.yml` hands the side's values to the action. In these organizations the action fails the job before the
 build when the signing key, the certificate, the ArmDot license, the bot token or the console key is missing,
