@@ -176,7 +176,15 @@ Build & deploy your extension (scripts read the target from .env — no DUPLO_BA
   #   then load it, since the installer reads only extensions/:
   #   ./scripts/deploy-extension.sh samples/helloworld/dist/extension.zip
   # re-attach the agent to another workspace: ./scripts/register-agent.sh <workspace-id>
+
+==> Open the portal in your browser:  http://localhost:4210
+    Sign in as <you@yourcompany.com> with the admin password you set.
 ```
+
+The last line is the URL to open. It is `http://localhost:$UI_PORT`, following `UI_PORT` if you move it,
+unless you have set `Authentication__FrontendBaseUrl` to another host, which is then shown as-is. If the portal is still starting, a `⚠ The portal isn't answering yet` line
+follows it; give it a minute. Running over SSH, the run also prints the `ssh -L` command that forwards the
+port to your own machine.
 
 Re-running `./run.sh` from here is safe and idempotent: every step above is skipped when it is already
 satisfied. What the values in that banner mean is in
@@ -184,7 +192,8 @@ satisfied. What the values in that banner mean is in
 
 ## 1.7 Sign in
 
-1. Open <http://localhost:4210>.
+1. Open the URL from the run's last line, `==> Open the portal in your browser:` (by default
+   <http://localhost:4210>).
 
 2. Sign in with the credentials you just gave `./run.sh`:
 
