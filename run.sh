@@ -31,7 +31,7 @@
 #                                  `claude setup-token` on this machine). Local development only: it
 #                                  authenticates as you and counts against your Claude Code limits.
 #                                  Ticket titles are not generated on this path (title LLM is Bedrock-only).
-#   ./run.sh --model gateway --gateway-url https://openrouter.ai/api --gateway-token sk-or-... [--gateway-model anthropic/claude-sonnet-5]
+#   ./run.sh --model gateway --gateway-url https://openrouter.ai/api --gateway-token sk-or-... [--gateway-model anthropic/claude-sonnet-5-5]
 #                                  any Anthropic-compatible LLM gateway (OpenRouter, Bifrost, LiteLLM, …). Optional
 #                                  Sets a 262144-token context window and a 200000 compact threshold (a gateway
 #                                  usually serves model ids the CLI does not know, which otherwise have none);
@@ -782,8 +782,8 @@ resolve() { # flagval envkey label [secret]
 # probe proves invoke permission on the exact model the agent will call (not just "some" Bedrock access).
 # BEDROCK_EXTRA_MODELS are offered alongside it in the ticket LLM picker (not probed — a missing Opus
 # inference profile shows up as a failed ticket, not a failed setup).
-BEDROCK_PROBE_MODEL="us.anthropic.claude-sonnet-5"
-BEDROCK_EXTRA_MODELS="us.anthropic.claude-opus-5"
+BEDROCK_PROBE_MODEL="us.anthropic.claude-sonnet-5-5"
+BEDROCK_EXTRA_MODELS="us.anthropic.claude-opus-5-5"
 
 echo "==> Setup (prompts appear only for values not already set)…"
 # Very basic email sanity check: name@example.com (no spaces).
@@ -1058,8 +1058,8 @@ setenv AIStudio__IsMasterDisabled true
 if [ "$MODEL" = anthropic ]; then
   KEY="$(resolve "$F_ANTHROPIC" ANTHROPIC_API_KEY 'Anthropic API key' secret)"
   setenv ANTHROPIC_API_KEY "$KEY"
-  setenv CLAUDE_MODEL "claude-sonnet-5"
-  setenv CLAUDE_EXTRA_MODELS "claude-opus-5"
+  setenv CLAUDE_MODEL "claude-sonnet-5-5"
+  setenv CLAUDE_EXTRA_MODELS "claude-opus-5-5"
   # A gateway URL left over from a previous provider choice would make the agent send this key to the
   # gateway instead of api.anthropic.com (key + URL = "proxy in front of Anthropic"). Warn, don't clear.
   [ -z "$(getenv ANTHROPIC_BASE_URL)" ] || echo "    note: ANTHROPIC_BASE_URL is still set in .env — the agent will send your Anthropic key THERE, not to api.anthropic.com. Clear it (or ./run.sh --reset) unless that's intended."

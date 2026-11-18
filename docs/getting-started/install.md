@@ -165,7 +165,7 @@ You are done when you see:
   API       http://localhost:60031
   Workspace extension-dev  (68d1f0c2a4b95e0c3d7e1a42)  ·  agent registered + attached
   Token     DUPLO_ADMIN_TOKEN set in .env (permanent)
-  LLM       System default → claude-sonnet-5 (direct Anthropic); also available: claude-opus-5
+  LLM       System default → claude-sonnet-5-5 (direct Anthropic); also available: claude-opus-5-5
 
 Build & deploy your extension (scripts read the target from .env — no DUPLO_BASE= prefix needed):
   ./scripts/build-extension.sh  extensions/<name>               # your extensions live in extensions/<name>/
