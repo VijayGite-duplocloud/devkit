@@ -16,10 +16,12 @@ The rules for writing theme-aware styles are in
 [duplo-extension-dev/reference/21-theming.md](../duplo-extension-dev/reference/21-theming.md). This skill is the
 upgrade path for an extension that predates them. Work in the extension's `frontend/`.
 
-## 1. Vendor ng-common-lib ≥ 0.5.1
+## 1. Vendor ng-common-lib ≥ 0.5.3
 
 0.5.1 carries the dark-theme components **and** zero-specificity token defaults, so the migrated extension also
-keeps its look on portals that predate the dark theme.
+keeps its look on portals that predate the dark theme. 0.5.3 adds the defaults for the terminal tokens step 4
+maps consoles to, `$g-terminal-bg` and `$g-terminal-fg`; below it a migrated console is transparent on a portal
+without those tokens, such as `release/0.2.24`.
 
 - Get the tarball: copy it from this repo's `packages/`, or (once published) `npm pack
   @duplocloud-internal/ng-common-lib@0.8.0` (GitHub Packages; needs a token with `read:packages` in `~/.npmrc`).
