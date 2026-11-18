@@ -16,8 +16,10 @@
 # In Duplo's own organizations (duplocloud, duplocloud-internal) the action also requires the signing key, the
 # certificate and the ArmDot license, mapped below from the org secrets CONSOLE_SIGNING_KEY and ARMDOT_LICENSE_KEY and
 # the org variable CONSOLE_SIGNING_CERT, and refuses a build that is unsigned or not obfuscated. The ArmDot build files
-# are not in this repository: the action fetches them from the private duplocloud-internal/.github with the org secret
-# RELEASE_BOT_GITHUB_TOKEN before the build. There the upload goes
+# are not in this repository: the action fetches them from the private duplocloud-internal/.github with the release
+# bot token before the build. Each organization's token reaches that organization alone, so a repository in
+# duplocloud-internal reads the org secret RELEASE_BOT_GITHUB_TOKEN and one in duplocloud reads
+# RELEASE_BOT_GITHUB_TOKEN_INTERNAL, which holds the internal token there. There the upload goes
 # through the AWS role assumed below, whose trust list in ai-release names the repositories that may publish. Outside
 # those organizations nothing is obfuscated, nothing is signed unless the repository sets its own key and certificate,
 # and the upload goes through a URL the console issues.
@@ -84,7 +86,10 @@ jobs:
           CONSOLE_SIGNING_KEY: ${{ secrets.CONSOLE_SIGNING_KEY }}
           CONSOLE_SIGNING_CERT: ${{ vars.CONSOLE_SIGNING_CERT }}
           ARMDOT_LICENSE_KEY: ${{ secrets.ARMDOT_LICENSE_KEY }}
-          RELEASE_BOT_GITHUB_TOKEN: ${{ secrets.RELEASE_BOT_GITHUB_TOKEN }}
+          # Each organization's release bot token reaches that organization alone, and the ArmDot build files live in
+          # duplocloud-internal, so a repository in duplocloud reads the internal token from its own second secret.
+          RELEASE_BOT_GITHUB_TOKEN: ${{ secrets[github.repository_owner == 'duplocloud' && 'RELEASE_BOT_GITHUB_TOKEN_INTERNAL' || 'RELEASE_BOT_GITHUB_TOKEN'] }}
+          RELEASE_BOT_SECRET_NAME: ${{ github.repository_owner == 'duplocloud' && 'RELEASE_BOT_GITHUB_TOKEN_INTERNAL' || 'RELEASE_BOT_GITHUB_TOKEN' }}
           EXTENSION_PUBLISHER_ROLE_ARN: ${{ vars.EXTENSION_PUBLISHER_ROLE_ARN }}
           CONSOLE_TEAM: ${{ vars.CONSOLE_TEAM }}
         run: |
@@ -92,9 +97,10 @@ jobs:
           for v in DUPLO_HOST DUPLO_TOKEN CONSOLE_API_KEY; do [ -n "${!v:-}" ] || missing+=("$v"); done
           case "$GITHUB_REPOSITORY_OWNER" in
             duplocloud|duplocloud-internal)
-              for v in CONSOLE_SIGNING_KEY CONSOLE_SIGNING_CERT ARMDOT_LICENSE_KEY RELEASE_BOT_GITHUB_TOKEN EXTENSION_PUBLISHER_ROLE_ARN; do
+              for v in CONSOLE_SIGNING_KEY CONSOLE_SIGNING_CERT ARMDOT_LICENSE_KEY EXTENSION_PUBLISHER_ROLE_ARN; do
                 [ -n "${!v:-}" ] || missing+=("$v")
-              done ;;
+              done
+              [ -n "${RELEASE_BOT_GITHUB_TOKEN:-}" ] || missing+=("$RELEASE_BOT_SECRET_NAME") ;;
             *) [ -n "${CONSOLE_TEAM:-}" ] || missing+=(CONSOLE_TEAM) ;;
           esac
           [ ${#missing[@]} -eq 0 ] && exit 0
@@ -124,7 +130,7 @@ jobs:
           signing-key: ${{ secrets.CONSOLE_SIGNING_KEY }}
           signing-cert: ${{ vars.CONSOLE_SIGNING_CERT }}
           armdot-license: ${{ secrets.ARMDOT_LICENSE_KEY }}
-          armdot-config-token: ${{ secrets.RELEASE_BOT_GITHUB_TOKEN }}
+          armdot-config-token: ${{ secrets[github.repository_owner == 'duplocloud' && 'RELEASE_BOT_GITHUB_TOKEN_INTERNAL' || 'RELEASE_BOT_GITHUB_TOKEN'] }}
           bundle-bucket: ${{ vars.BUNDLE_BUCKET || 'duplo-helpdesk-channels' }}
           # SDK versions to build against from the package feed, one per line, one bundle and one release per version.
           # The action exports them to the build as DUPLO_SDK_VERSIONS, so a job env of that name would be overwritten.
