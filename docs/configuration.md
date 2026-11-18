@@ -107,10 +107,10 @@ Pin the published images the stack runs.
 | Variable | Default in `.env.example` | Effect |
 | --- | --- | --- |
 | `STUDIO_TAG` | `branch-refs-pull-548-merge-663a7586` | The AI HelpDesk studio image (the platform API). Format is `branch-<sanitized-branch>-<short-sha>`. Pinned to a build that enforces `Licensing:Token` — do not roll it back to a pre-licensing tag. |
-| `AGENT_TAG` | `main-d27e511` | The `claude-code-agent` image that executes provisioning tickets. A `main` build — it carries no extension-specific changes. |
+| `AGENT_TAG` | `main-d27e511` | The `claude-code-agent` image that executes provisioning tickets. A `main` build — it carries no agent-specific changes. |
 | `UI_TAG` | `2a949c536be71efd4501dd60ca6fdda4f7b4676a` | The Angular portal image. A `duplo-ui` git SHA, pinned to a build that renders the license state. |
 | `XTERM_TAG` | `main-d323e0b` | The in-browser terminal image. |
-| `INSTALLER_TAG` | `main-77bb43ca` | The extension installer image. Its own keys are under [Installing an extension](../README.md#installing-an-extension). |
+| `INSTALLER_TAG` | `main-77bb43ca` | The agent installer image. Its own keys are under [Installing an agent](../README.md#installing-an-agent). |
 | `STUDIO_PLATFORM` | `linux/amd64` | Docker platform for the studio image. On Apple Silicon the studio image is amd64-only and runs emulated. Leave as-is unless you have an arm64 image. |
 
 `STUDIO_TAG` and `UI_TAG` are required — `run.sh` exits if either is empty:
@@ -206,7 +206,7 @@ Managed by `./run.sh` — leave them blank in a fresh `.env` and let it prompt.
 | `MONGO_ROOT_PASSWORD` | Mongo's root password, generated once (`openssl rand -hex 32`). Mongo applies it only when it initialises an empty data volume, so it is regenerated only on `--reset`, and a run that would generate one over an existing volume stops and says so. |
 | `Agent__ApiAuthToken` | Generated once (`openssl rand -hex 32`). Regenerated only on `--reset`. The studio sends it as a bearer on every call to `claude-code-agent`, which receives it as `CCA_API_AUTH_TOKEN` and returns 401 to any call without it. |
 | `AIStudio__IsMasterDisabled` | `true`. Required for standalone operation with no DuploCloud master. |
-| `AIStudio__DevKitMode` | `true`. Dev-kit only: exposes the per-extension **Clean Database** admin action, which drops one extension's data collections. |
+| `AIStudio__DevKitMode` | `true`. Dev-kit only: exposes the per-agent **Clean Database** admin action, which drops one agent's data collections. |
 
 ## LLM provider
 

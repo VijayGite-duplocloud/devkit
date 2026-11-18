@@ -63,7 +63,7 @@ page headed **Add Provider** with a progress rail down the right-hand side listi
    button reading **AI DevOps** — and choose **AI Admin**.
 
    The sidebar changes to: Workspaces, Memories, Personas, Skills, MCP Servers, Providers,
-   Notifications, Extensions, Resources, LLMs, Analytics, Security, Access Control, Settings.
+   Notifications, Marketplace, Resources, LLMs, Analytics, Security, Access Control, Settings.
 
 2. Click **Providers** in that sidebar, then **IT**. (**GTM** is the other category; cloud accounts
    are IT.)
@@ -121,8 +121,8 @@ this provider."* The provider says *which* account. The credential says *how to 
 
 The last step of the wizard is **Scope**.
 
-A **scope** is the boundary of what the agent may touch. Both HelpDesk tickets and extensions target a
-scope — a ticket runs against the scope you pick on it, and an extension's resource spec carries the
+A **scope** is the boundary of what the agent may touch. Both HelpDesk tickets and agents target a
+scope — a ticket runs against the scope you pick on it, and an agent's resource spec carries the
 scope IDs it was given.
 
 When a ticket runs, the platform expands the scope into its provider and credential and hands them to

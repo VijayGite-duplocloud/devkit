@@ -255,7 +255,7 @@ credential says *how to authenticate to it*.
 The last step of the wizard is **Scope**.
 
 A **scope** is the boundary of what the agent may touch: a credential, and the resources that
-credential may be used against. Both HelpDesk tickets and extensions target a scope.
+credential may be used against. Both HelpDesk tickets and agents target a scope.
 
 When a ticket runs, the platform expands the scope into its provider and credential and hands them to
 the agent, which writes them into the ticket's working directory — for Kubernetes, as a context in a
@@ -404,4 +404,4 @@ means the agent reached nothing. See
 > credential of type **IAM Role**, and the scope above is unchanged. Nothing in this guide needs to be
 > redone.
 
-**Next:** [4. Build your first extension](build-your-first-extension.md)
+**Next:** [4. Build your first agent](build-your-first-extension.md)

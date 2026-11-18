@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Interactive, idempotent setup + start for the DuploCloud Extension Dev Kit.
+# Interactive, idempotent setup + start for the DuploCloud Agent Dev Kit.
 #
 #   ./run.sh                       first run prompts for email and requests a trial license. You are emailed
 #                                  a verification link: click it and the license is issued and picked up
@@ -118,7 +118,7 @@ done
 #   python3  every .env write and every JSON response in this script and in scripts/ is parsed with it.
 #            No version floor: only the stdlib (json, sys, os, datetime, base64) is used, so anything
 #            still called python3 is new enough.
-#   RUNTIME  the whole stack, and every extension build, runs in containers. Which CLI drives them is
+#   RUNTIME  the whole stack, and every agent build, runs in containers. Which CLI drives them is
 #            resolved by scripts/_runtime.sh (RUNTIME in the environment or .env, else auto-detected);
 #            it must provide a v2-style `compose` subcommand. The standalone `docker-compose` v1 binary
 #            is not used.
@@ -191,7 +191,7 @@ fi
 
 # Sized-VM check. Separate from the MISSING one-pass above because it needs RUNTIME already resolved,
 # and it is a hard failure by design: an undersized podman machine does not stop the stack from coming
-# up, it silently poisons every extension build later with an OOM kill that reports itself as a Go
+# up, it silently poisons every agent build later with an OOM kill that reports itself as a Go
 # deadlock and 'exit status 137'. A no-op on docker and on a machine-less podman.
 runtime_machine_check || exit 1
 
@@ -679,7 +679,7 @@ fi
 # address. Clearing it here would only mean re-fetching the identical string a moment later — and dead-ending
 # whenever that fetch failed. --reset-license (below) is how you ask for it to actually go away.
 if [ "$RESET" = 1 ]; then
-  echo "==> --reset: tearing down stack + volumes (DB, extensions, file store)…"
+  echo "==> --reset: tearing down stack + volumes (DB, agents, file store)…"
   "$RUNTIME" compose down -v 2>/dev/null || true
   for k in Authentication__LocalAdminEmail Authentication__LocalAdminPassword Authentication__SuperUsers \
            DEVKIT_MODEL ANTHROPIC_API_KEY AWS_REGION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN \
@@ -1265,8 +1265,8 @@ else
   echo "    (persona registration failed — run ./scripts/register-persona.sh $WS manually)"
 fi
 
-# ── vendor the Terraform extension's source (idempotent, never fatal) ────────────
-# Puts the real, shipping Terraform extension's SOURCE in extensions/terraform — no .git, no upstream,
+# ── vendor the Terraform agent's source (idempotent, never fatal) ────────────
+# Puts the real, shipping Terraform agent's SOURCE in extensions/terraform — no .git, no upstream,
 # theirs to edit. Deliberately non-fatal: a private/unreachable source repo, or no network, must not
 # stop the platform from coming up. The getting started walkthrough for it is coming soon.
 TF_EXT_LINE=""
@@ -1334,14 +1334,14 @@ cat <<EOF
   Token     DUPLO_ADMIN_TOKEN set in .env (permanent)
   License   ${LICENSE_STATUS:-set in .env} (Licensing__Token)$PERSONA_LINE$LLM_LINE$KB_LINE$TF_EXT_LINE
 
-Build & deploy your extension (scripts read the target from .env — no DUPLO_BASE= prefix needed):
-  ./scripts/build-extension.sh  extensions/<name>               # your extensions live in extensions/<name>/
+Build & deploy your agent (scripts read the target from .env — no DUPLO_BASE= prefix needed):
+  ./scripts/build-extension.sh  extensions/<name>               # your agents live in extensions/<name>/
   # the installer service loads each build in extensions/<name>/dist/ by itself, within about 20 seconds
-  # without the installer, or on a remote target: ./scripts/deploy-extension.sh extensions/<name>/dist/extension.zip
-  # or build every extension:    ./scripts/build-all.sh
+  # without the installer, or on a remote target: ./scripts/deploy-extension.sh extensions/<name>/dist/agent.zip
+  # or build every agent:        ./scripts/build-all.sh
   # or build a bundled sample:   ./scripts/build-extension.sh samples/helloworld
   #   then load it, since the installer reads only extensions/:
-  #   ./scripts/deploy-extension.sh samples/helloworld/dist/extension.zip
+  #   ./scripts/deploy-extension.sh samples/helloworld/dist/agent.zip
   # re-attach the agent to another workspace: ./scripts/register-agent.sh <workspace-id>
   # attach the devops persona elsewhere:       ./scripts/register-persona.sh <workspace-id>
 EOF

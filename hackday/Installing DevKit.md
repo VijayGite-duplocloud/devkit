@@ -6,7 +6,7 @@
 **Do this before you arrive.** You have six hours on Hack Day — spend them on your agent, not on
 image pulls over conference wifi.
 
-![The DuploCloud platform running locally, with the New Extension form filled in](../docs/images/devkit-new-extension.png)
+![The DuploCloud platform running locally, with the New Agent form filled in](../docs/images/devkit-new-extension.png)
 
 ---
 
@@ -49,7 +49,7 @@ cd my-agent
 ```
 
 **2. Adopt the clone into your own repo.** This points `origin` at your repository and seeds your first
-extension directory — do it now so your Hack Day work has somewhere to live.
+agent directory — do it now so your Hack Day work has somewhere to live.
 
 ```bash
 ./scripts/init-project.sh git@github.com:<your-github-user>/<your-repo>.git
