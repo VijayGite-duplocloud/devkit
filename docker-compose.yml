@@ -104,7 +104,7 @@ services:
   # secret, so no host port is published.
   installer:
     # Defaults to .env.example's pin, so `docker compose up` before run.sh copies INSTALLER_TAG into .env still starts.
-    image: quay.io/duplocloud/helpdesk-installer:${INSTALLER_TAG:-main-af01f400}
+    image: quay.io/duplocloud/helpdesk-installer:${INSTALLER_TAG:-main-77bb43ca}
     restart: unless-stopped
     environment:
       - INSTALLER_PLATFORM=compose
@@ -298,7 +298,7 @@ services:
       # localhost on UI_PORT, and some people type 127.0.0.1 instead, so both are listed.
       - ALLOWED_ORIGINS=http://localhost:${UI_PORT:-4200},http://127.0.0.1:${UI_PORT:-4200}
 
-  # Build toolchain for extensions (.NET SDK 8 + Node 22). Behind a profile so the `compose pull`
+  # Build toolchain for extensions (.NET SDK 10 + Node 22). Behind a profile so the `compose pull`
   # and `up` in run.sh skip it entirely — a user who only runs the platform never downloads it. The
   # build wrapper starts it on demand with `$RUNTIME compose run --rm --no-deps builder`.
   #
@@ -350,6 +350,10 @@ services:
       # The ArmDot license file. /dev/null stands in when none is set, so the mount is always valid and the
       # variable below stays empty, which build-extension.sh reads as "do not obfuscate".
       - ${ARMDOT_LICENSE_FILE_PATH:-/dev/null}:/run/armdot/license.key:ro
+      # The ArmDot build files, a checkout of armdot/ from duplocloud-internal/.github. The repository's own
+      # build/ stands in when none is set, so the mount is always valid; it holds none of the files, and a
+      # licensed build then fails naming DUPLO_ARMDOT_DIR.
+      - ${DUPLO_ARMDOT_DIR:-./build}:/run/armdot/config:ro
     environment:
       - DUPLO_BUILD_NATIVE=1
       - DUPLO_TARGET=${DUPLO_TARGET:-local}
@@ -364,6 +368,7 @@ services:
       - DUPLO_ADMIN_TOKEN=${DUPLO_ADMIN_TOKEN:-}
       - ARMDOT_LICENSE_FILE_PATH=${ARMDOT_LICENSE_FILE_PATH:+/run/armdot/license.key}
       - DUPLO_SDK_VERSIONS=${DUPLO_SDK_VERSIONS:-}
+      - DUPLO_ARMDOT_DIR=${DUPLO_ARMDOT_DIR:+/run/armdot/config}
 
 volumes:
   nginx_conf:

@@ -22,7 +22,9 @@
 #
 # In Duplo's own organizations (duplocloud, duplocloud-internal) the action also requires the signing key, the
 # certificate and the ArmDot license, mapped below from the org secrets CONSOLE_SIGNING_KEY and ARMDOT_LICENSE_KEY and
-# the org variable CONSOLE_SIGNING_CERT, and refuses a build that is unsigned or not obfuscated. There the upload goes
+# the org variable CONSOLE_SIGNING_CERT, and refuses a build that is unsigned or not obfuscated. The ArmDot build files
+# are not in this repository: the action fetches them from the private duplocloud-internal/.github with the org secret
+# RELEASE_BOT_GITHUB_TOKEN before the build. There the upload goes
 # through the AWS role assumed below, whose trust list in ai-release names the repositories that may publish. Outside
 # those organizations nothing is obfuscated, nothing is signed unless the repository sets its own key and certificate,
 # and the upload goes through a URL the console issues.
