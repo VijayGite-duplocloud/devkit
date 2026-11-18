@@ -87,10 +87,14 @@ TXT
     # default would never reach an existing install. A value equal to a previous default is ours,
     # not the user's choice: move it to the current default. Anything else (or an explicit
     # --subscription-model, even an old default) is a deliberate pick and is kept.
-    case " $SUBSCRIPTION_PREVIOUS_DEFAULTS " in
-      *" $model "*) [ -n "$model" ] && echo "    note: CLAUDE_MODEL was the previous default '$model' — moving to $SUBSCRIPTION_DEFAULT_MODEL." >&2
-                    model="$SUBSCRIPTION_DEFAULT_MODEL" ;;
-    esac
+    # Plain string equality per entry — no glob matching — so a hand-edited value containing *, ? or [
+    # can only ever equal itself, never match a previous default by accident.
+    for prev in $SUBSCRIPTION_PREVIOUS_DEFAULTS; do
+      if [ "$model" = "$prev" ]; then
+        echo "    note: CLAUDE_MODEL was the previous default '$model' — moving to $SUBSCRIPTION_DEFAULT_MODEL." >&2
+        model="$SUBSCRIPTION_DEFAULT_MODEL"; break
+      fi
+    done
   fi
   [ -n "$model" ] || model="$SUBSCRIPTION_DEFAULT_MODEL"
   # A model id carried over from another provider — a Bedrock inference-profile id or a gateway's

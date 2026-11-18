@@ -137,6 +137,24 @@ reset_env; setenv CLAUDE_MODEL "claude-opus-5"; F_SUBSCRIPTION_TOKEN="sk-ant-oat
 provider_subscription_configure >/dev/null 2>&1
 if [ "$(getenv CLAUDE_MODEL)" = "claude-opus-5" ]; then ok; else bad "$(getenv CLAUDE_MODEL)"; fi
 
+# The previous-default check is plain string equality: a hand-edited value with glob characters can
+# only equal itself, never match a previous default (PR #86 review).
+for v in '*' 'claude-*' '?laude-sonnet-5' '[c]laude-sonnet-5'; do
+  t "keeps a glob-looking .env value ($v) — no pattern matching"
+  reset_env; setenv CLAUDE_MODEL "$v"; F_SUBSCRIPTION_TOKEN="sk-ant-oat01-abc"
+  provider_subscription_configure >/dev/null 2>&1
+  if [ "$(getenv CLAUDE_MODEL)" = "$v" ]; then ok; else bad "$(getenv CLAUDE_MODEL)"; fi
+done
+
+t "every entry of a multi-entry previous-defaults list is upgraded"
+saved="$SUBSCRIPTION_PREVIOUS_DEFAULTS"; SUBSCRIPTION_PREVIOUS_DEFAULTS="claude-sonnet-5 claude-sonnet-4-6"; r=""
+for v in claude-sonnet-5 claude-sonnet-4-6; do
+  reset_env; setenv CLAUDE_MODEL "$v"; F_SUBSCRIPTION_TOKEN="sk-ant-oat01-abc"
+  provider_subscription_configure >/dev/null 2>&1; r="$r $(getenv CLAUDE_MODEL)"
+done
+SUBSCRIPTION_PREVIOUS_DEFAULTS="$saved"
+if [ "$r" = " claude-sonnet-5-5 claude-sonnet-5-5" ]; then ok; else bad "got:$r"; fi
+
 # This path talks to the first-party API with bare model ids, exactly like the `anthropic` arm —
 # so the picker should offer the same extras. (The gateway arm blanks them for a different reason:
 # a gateway names models its own way, and we only know the one id the user gave us.)

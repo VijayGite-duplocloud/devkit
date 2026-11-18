@@ -58,5 +58,22 @@ if switch subscription && [ "$(getenv CLAUDE_CODE_OAUTH_TOKEN)" = "sk-ant-oat01-
 t "…but a flat stash of a shared key (CLAUDE_MODEL) is ignored"
 if [ "$(getenv CLAUDE_MODEL)" = "claude-sonnet-5-5" ]; then ok; else bad "CLAUDE_MODEL=$(getenv CLAUDE_MODEL)"; fi
 
+# switch-llm.sh restores the stashed gateway model into .env, then runs the same gateway configure — so a
+# gateway stashed on the previous default is upgraded on the way back too (PR #86 review).
+t "subscription → gateway upgrades a stashed previous-default gateway model"
+cat > "$ENV" <<'ENVF'
+DEVKIT_MODEL=subscription
+CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-x
+CLAUDE_MODEL=claude-sonnet-5-5
+_STASH_GATEWAY_ANTHROPIC_BASE_URL=https://gw.example
+_STASH_GATEWAY_ANTHROPIC_AUTH_TOKEN=gw-token
+_STASH_GATEWAY_CLAUDE_MODEL=claude-sonnet-5
+ENVF
+# The note proves the stashed claude-sonnet-5 was restored and then upgraded — the subscription's own
+# claude-sonnet-5-5 merely surviving the switch would pass the value check alone.
+if switch gateway && [ "$(getenv CLAUDE_MODEL)" = "claude-sonnet-5-5" ] \
+   && [ "$(getenv ANTHROPIC_BASE_URL)" = "https://gw.example" ] \
+   && grep -q "previous default 'claude-sonnet-5'" "$ROOT/out"; then ok; else bad "CLAUDE_MODEL=$(getenv CLAUDE_MODEL); $(cat "$ROOT/out")"; fi
+
 echo; echo "$PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]

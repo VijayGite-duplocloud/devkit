@@ -121,5 +121,32 @@ if printf '%s\n' "${GATEWAY_KEYS[@]}" | grep -qx ANTHROPIC_BASE_URL \
    && printf '%s\n' "${GATEWAY_KEYS[@]}" | grep -qx ANTHROPIC_AUTH_TOKEN \
    && printf '%s\n' "${GATEWAY_KEYS[@]}" | grep -qx CLAUDE_CODE_AUTO_COMPACT_WINDOW; then ok; else bad "${GATEWAY_KEYS[*]:-unset}"; fi
 
+# This arm keeps the .env model across runs, so a bumped default never reaches an existing install on
+# its own. An exact previous default (bare id, i.e. the prompt default accepted) is upgraded; a gateway's
+# own names, explicit flags and anything else are kept (PR #86 review).
+echo "gateway provider — previous-default migration:"
+t "upgrades the previous default (claude-sonnet-5) left in .env, with a note"
+reset_env; setenv CLAUDE_MODEL "claude-sonnet-5"; F_GATEWAY_URL="https://x.example"; F_GATEWAY_TOKEN="t"
+note="$(provider_gateway_configure 2>&1 >/dev/null)"
+if [ "$(getenv CLAUDE_MODEL)" = "claude-sonnet-5-5" ] && grep -q "previous default 'claude-sonnet-5'" <<<"$note" \
+   && grep -q -- '--gateway-model' <<<"$note"; then ok; else bad "CLAUDE_MODEL=$(getenv CLAUDE_MODEL); $note"; fi
+
+t "keeps a gateway-namespaced id (anthropic/claude-sonnet-5)"
+reset_env; setenv CLAUDE_MODEL "anthropic/claude-sonnet-5"; F_GATEWAY_URL="https://x.example"; F_GATEWAY_TOKEN="t"
+provider_gateway_configure >/dev/null 2>&1
+if [ "$(getenv CLAUDE_MODEL)" = "anthropic/claude-sonnet-5" ]; then ok; else bad "$(getenv CLAUDE_MODEL)"; fi
+
+t "keeps an explicit --gateway-model for the run that passes it, even a previous default"
+reset_env; F_GATEWAY_URL="https://x.example"; F_GATEWAY_TOKEN="t"; F_GATEWAY_MODEL="claude-sonnet-5"
+provider_gateway_configure >/dev/null 2>&1
+if [ "$(getenv CLAUDE_MODEL)" = "claude-sonnet-5" ]; then ok; else bad "$(getenv CLAUDE_MODEL)"; fi
+
+for v in '*' 'claude-*' '[c]laude-sonnet-5'; do
+  t "keeps a glob-looking .env value ($v) — no pattern matching"
+  reset_env; setenv CLAUDE_MODEL "$v"; F_GATEWAY_URL="https://x.example"; F_GATEWAY_TOKEN="t"
+  provider_gateway_configure >/dev/null 2>&1
+  if [ "$(getenv CLAUDE_MODEL)" = "$v" ]; then ok; else bad "$(getenv CLAUDE_MODEL)"; fi
+done
+
 echo; echo "$PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]
