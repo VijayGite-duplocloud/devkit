@@ -244,6 +244,13 @@ never plain CRUD access — revealing a secret is a materially bigger grant than
     Description = "Decrypts and returns the real password. A materially bigger grant than ordinary read access.")]
 public async Task<IActionResult> RevealPassword(string id, CancellationToken ct)
 {
+    // The base ResourcesController.GetById checks the resource belongs to the route's workspace before
+    // returning it (CheckResourceBelongsToRouteWorkspaceAsync — private, so not directly reusable here).
+    // This custom endpoint bypasses that base action entirely, so it needs the same guard explicitly.
+    var workspaceId = GetWorkspaceIdFromRoute();
+    var owner = await ResourceServiceFacet.GetByIdUnenrichedAsync(id, ct);
+    if (owner == null || owner.OwnerWorkspaceId != workspaceId) return NotFound();
+
     var value = await _service.RevealPasswordAsync(id, ct);   // decrypts; throws KeyNotFoundException / InvalidOperationException
     return Ok(ApiResponse<object>.SuccessResult(new { value }, "Password retrieved"));
 }
@@ -251,7 +258,8 @@ public async Task<IActionResult> RevealPassword(string id, CancellationToken ct)
 
 The service method re-reads the entity, checks `IsEncryptedAsync` to detect a stored value that failed to
 decrypt (surface that as an explicit error — never hand back ciphertext as if it were real), and returns
-the plaintext. See `samples/secret-field` for the full method.
+the plaintext. See `samples/secret-field` for the full method, including the same workspace-ownership
+check this endpoint needs.
 
 ## The skill side — reading the sibling `.secrets.json`
 

@@ -71,7 +71,7 @@ import { SecretFieldServiceAccountService } from '../secret-field-service-accoun
                   @if (isEdit) {
                     <div class="text-muted font-small-3 mt-25">
                       Leave blank to keep the current password. To retrieve the current value instead of
-                      replacing it, use "Reveal password" on the detail page.
+                      replacing it, use the eye icon on the Password tile of the detail page.
                     </div>
                   }
                 </form-field>
