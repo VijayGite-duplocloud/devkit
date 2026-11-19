@@ -284,9 +284,9 @@ Written on first run. You should not need to set these by hand.
 | Variable | Effect |
 | --- | --- |
 | `DUPLO_ADMIN_TOKEN` | A never-expiring admin API token, minted by logging in as the admin user. Every script uses it when `DUPLO_TARGET=local`. |
-| `EXTENSION_DEV_WORKSPACE_ID` | The auto-created `extension-dev` workspace. |
-| `EXTENSION_DEV_PERMSET_ID` | The `extension-dev-access` permission set granting that workspace. |
-| `EXTENSION_DEV_PERMSETGROUP_ID` | The `extension-dev-group` assigning your admin user to that permission set. |
+| `EXTENSION_DEV_WORKSPACE_ID` | The auto-created `agent-dev` workspace. |
+| `EXTENSION_DEV_PERMSET_ID` | The `agent-dev-access` permission set granting that workspace. |
+| `EXTENSION_DEV_PERMSETGROUP_ID` | The `agent-dev-group` assigning your admin user to that permission set. |
 | `QDRANT_PROVIDER_ID`, `QDRANT_SCOPE_ID`, `QDRANT_COLLECTION_ID` | The `local-qdrant` provider, the `qdrant` scope over it, and the `devkit-docs` collection, all written by `scripts/register-qdrant.sh`. Cleared by `--reset` with the rest of the stack state, because the records they name go with the database. |
 
 The permission set and group exist because the UI's accessible-workspace list is permission-set based with

@@ -154,7 +154,7 @@ Every `./run.sh` flag is in the [CLI reference](../cli-reference.md#runsh).
 ## 1.6 The ready banner
 
 `./run.sh` pulls the images, starts the stack, waits for the studio, mints a permanent admin token,
-creates the `extension-dev` workspace, grants your user access to it, and registers the agent. On a cold
+creates the `agent-dev` workspace, grants your user access to it, and registers the agent. On a cold
 machine the pull is the slow part.
 
 You are done when you see:
@@ -163,7 +163,7 @@ You are done when you see:
 ✔ Platform ready (provider: anthropic)
   UI        http://localhost:4210     (login: <you@yourcompany.com>)
   API       http://localhost:60031
-  Workspace extension-dev  (68d1f0c2a4b95e0c3d7e1a42)  ·  agent registered + attached
+  Workspace agent-dev  (68d1f0c2a4b95e0c3d7e1a42)  ·  agent registered + attached
   Token     DUPLO_ADMIN_TOKEN set in .env (permanent)
   LLM       System default → claude-sonnet-5 (direct Anthropic); also available: claude-opus-5
 
@@ -193,17 +193,17 @@ satisfied. What the values in that banner mean is in
    | **Email** | `<you@yourcompany.com>` |
    | **Password** | the password from [1.5](#15-the-rest-of-the-prompts) |
 
-   You land in the portal with the `extension-dev` workspace selected.
+   You land in the portal with the `agent-dev` workspace selected.
 
 ## 1.8 Confirm your workspace
 
 You are signed in, which means the platform is up and your account works. One thing left to confirm:
 `./run.sh` also created a **workspace** for you to build in, and put you in it.
 
-Look at the top of the page. Next to **Workspace :** the selector reads **EXTENSION-DEV**. Open it and
-`extension-dev` is listed — that is the workspace `./run.sh` created and attached the agent to.
+Look at the top of the page. Next to **Workspace :** the selector reads **AGENT-DEV**. Open it and
+`agent-dev` is listed — that is the workspace `./run.sh` created and attached the agent to.
 
-![The workspace selector at the top of the portal, open, showing the extension-dev workspace](../images/devkit-workspace-selector.png)
+![The workspace selector at the top of the portal, open, showing the agent-dev workspace](../images/devkit-workspace-selector.png)
 
 That is page 1 done. You have the platform running, an account that signs in, and a workspace to work
 in — everything the rest of the guide builds on.

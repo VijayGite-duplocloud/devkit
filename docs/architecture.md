@@ -26,7 +26,7 @@ Qdrant is the one service the platform reaches only through its own records: the
 to it until a provider and a collection exist. `run.sh` therefore runs
 [`scripts/register-qdrant.sh`](cli-reference.md#platform-registration), which registers Qdrant as a
 `vectorDatabase` provider, wraps it in a `qdrant` scope so the provider is selectable in the ticket scope
-picker, and creates an empty `devkit-docs` collection owned by the `extension-dev` workspace. That
+picker, and creates an empty `devkit-docs` collection owned by the `agent-dev` workspace. That
 collection's read access is *not* that scope — about a minute after it is created, the reconcile worker
 mints a read-only token scoped to the one collection, wraps it in a `kb-devkit-docs-readonly` scope, and
 attaches it to the owning workspace by itself.
@@ -107,5 +107,5 @@ Real environment variables override the file, so CI can supply both as secrets w
 
 The UI's accessible-workspace list is permission-set based, with no superuser bypass. An admin token can
 hit every API while the portal still shows no workspaces. `run.sh` therefore creates three things beyond
-the `extension-dev` workspace: a permission set granting it, a permission-set group assigning your user,
+the `agent-dev` workspace: a permission set granting it, a permission-set group assigning your user,
 and the workspace itself. Without them, login lands on `/app/auth/no-tenant-access`.

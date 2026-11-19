@@ -145,11 +145,11 @@ is filed in. The wizard offers this straight away, so there is nothing extra to 
 1. Creating the scope pops up **Attach Scope to Workspaces** — *"Select the workspaces to attach scope
    `aws-readonly` to."*
 
-2. Open the **Workspaces** control and pick **extension-dev**. You can attach to more than one.
+2. Open the **Workspaces** control and pick **agent-dev**. You can attach to more than one.
 
 3. Click **Attach**.
 
-   ![The Attach Scope to Workspaces dialog with extension-dev selected](../images/devkit-attach-scope-to-workspaces.png)
+   ![The Attach Scope to Workspaces dialog with agent-dev selected](../images/devkit-attach-scope-to-workspaces.png)
 
    The dialog also offers **Skip**. Take it only if you meant to attach the scope later — skipping
    leaves the scope created but invisible to every ticket, which looks exactly like the scope having

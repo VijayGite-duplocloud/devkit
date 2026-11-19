@@ -308,7 +308,7 @@ the workspace it is filed in. The wizard offers it straight away, exactly as it 
 
    ![The Attach Scope to Workspaces dialog that opens as soon as the scope is created](../images/k8s-attach-scope.png)
 
-2. Open the **Workspaces** control and pick **extension-dev**.
+2. Open the **Workspaces** control and pick **agent-dev**.
 
 3. Click **Attach** — not **Skip**. A scope that is not attached is created but invisible to every
    ticket, which looks exactly like the scope having failed to save.

@@ -46,7 +46,7 @@
 #
 # On completion it has: obtained a trial license for your admin email (Licensing__Token in .env),
 # pulled+started the stack, minted a permanent admin API token into .env
-# (DUPLO_ADMIN_TOKEN), and created a 'extension-dev' workspace (EXTENSION_DEV_WORKSPACE_ID). All values persist in .env.
+# (DUPLO_ADMIN_TOKEN), and created an 'agent-dev' workspace (EXTENSION_DEV_WORKSPACE_ID). All values persist in .env.
 set -euo pipefail
 cd "$(dirname "$0")"
 ENV=.env
@@ -1190,7 +1190,7 @@ else
   echo "==> Existing DUPLO_ADMIN_TOKEN is valid — keeping it."
 fi
 
-# ── extension-dev workspace (idempotent, never deleted) ──────────────────────────
+# ── agent-dev workspace (idempotent, never deleted) ──────────────────────────
 WS="$(getenv EXTENSION_DEV_WORKSPACE_ID)"
 ws_exists() { [ -n "$1" ] && curl -fsS -o /dev/null --max-time 6 "$API/v1/aiservicedesk/admin/data/workspaces/$1" -H "Authorization: Bearer $TOK" 2>/dev/null; }
 if ! ws_exists "$WS"; then
@@ -1198,17 +1198,17 @@ if ! ws_exists "$WS"; then
   WS="$(curl -fsS --max-time 8 "$API/v1/aiservicedesk/admin/data/workspaces" -H "Authorization: Bearer $TOK" 2>/dev/null \
       | python3 -c 'import sys,json
 d=json.load(sys.stdin); items=d.get("data",{}); items=items.get("items",items) if isinstance(items,dict) else items
-print(next((w["id"] for w in (items or []) if w.get("name")=="extension-dev"), ""))' 2>/dev/null || true)"
+print(next((w["id"] for w in (items or []) if w.get("name")=="agent-dev"), ""))' 2>/dev/null || true)"
   if [ -z "$WS" ]; then
-    echo "==> Creating 'extension-dev' workspace…"
+    echo "==> Creating 'agent-dev' workspace…"
     # Everything after this needs the workspace, so a refused create (most often an expired license —
     # the studio answers 400 license_limit_exceeded) stops here with the server's reason, not a traceback.
-    WS="$(studio_create_id "$API/v1/aiservicedesk/admin/data/workspaces" '{"name":"extension-dev"}')" \
-      || { echo "Could not create the extension-dev workspace — fix the cause above and re-run ./run.sh." >&2; exit 1; }
+    WS="$(studio_create_id "$API/v1/aiservicedesk/admin/data/workspaces" '{"name":"agent-dev"}')" \
+      || { echo "Could not create the agent-dev workspace — fix the cause above and re-run ./run.sh." >&2; exit 1; }
   fi
   setenv EXTENSION_DEV_WORKSPACE_ID "$WS"
 fi
-echo "    extension-dev workspace: $WS"
+echo "    agent-dev workspace: $WS"
 
 # ── UI workspace access (idempotent) ─────────────────────────────────────────
 # The UI's accessible-tenants list is permission-set based (no SuperUser bypass), so the admin user
@@ -1225,31 +1225,31 @@ print(next((x["id"] for x in (items or []) if x.get("name")==os.environ["N"]), "
 }
 PS="$(getenv EXTENSION_DEV_PERMSET_ID)"
 if ! data_exists "$PS" permissionset; then
-  PS="$(data_id_by_name permissionset extension-dev-access)"
+  PS="$(data_id_by_name permissionset agent-dev-access)"
   if [ -z "$PS" ]; then
-    echo "==> Creating 'extension-dev-access' permission set…"
+    echo "==> Creating 'agent-dev-access' permission set…"
     PS="$(studio_create_id "$API/v1/aiservicedesk/admin/data/permissionset" \
-        "$(W="$WS" python3 -c 'import json,os;print(json.dumps({"name":"extension-dev-access","allowedWorkspaces":[{"workspaceId":os.environ["W"]}]}))')")" \
+        "$(W="$WS" python3 -c 'import json,os;print(json.dumps({"name":"agent-dev-access","allowedWorkspaces":[{"workspaceId":os.environ["W"]}]}))')")" \
       || echo "    (permission set not created — UI access to the workspace must be granted by hand)" >&2
   fi
   [ -n "$PS" ] && setenv EXTENSION_DEV_PERMSET_ID "$PS"
 fi
 PSG="$(getenv EXTENSION_DEV_PERMSETGROUP_ID)"
 if ! data_exists "$PSG" permissionsetgroup; then
-  PSG="$(data_id_by_name permissionsetgroup extension-dev-group)"
+  PSG="$(data_id_by_name permissionsetgroup agent-dev-group)"
   if [ -z "$PSG" ]; then
     echo "==> Assigning $EMAIL to the permission set…"
     PSG="$(studio_create_id "$API/v1/aiservicedesk/admin/data/permissionsetgroup" \
-        "$(P="$PS" E="$EMAIL" python3 -c 'import json,os;print(json.dumps({"name":"extension-dev-group","permissionSets":[os.environ["P"]],"userStringHandle":[os.environ["E"]]}))')")" \
+        "$(P="$PS" E="$EMAIL" python3 -c 'import json,os;print(json.dumps({"name":"agent-dev-group","permissionSets":[os.environ["P"]],"userStringHandle":[os.environ["E"]]}))')")" \
       || echo "    (permission set group not created — assign $EMAIL to the permission set by hand)" >&2
   fi
   [ -n "$PSG" ] && setenv EXTENSION_DEV_PERMSETGROUP_ID "$PSG"
 fi
 echo "    UI access granted to $EMAIL (permission set $PS) — re-login if the workspace isn't listed yet (the assignment is cached)."
 
-# ── register + attach the agent to the extension-dev workspace (idempotent) ──────
+# ── register + attach the agent to the agent-dev workspace (idempotent) ──────
 # Provisioning tickets are assigned from the workspace's agent list, so the workspace needs an agent.
-echo "==> Registering + attaching agent to extension-dev workspace…"
+echo "==> Registering + attaching agent to agent-dev workspace…"
 ./scripts/register-agent.sh "$WS" || echo "    (agent registration failed — run ./scripts/register-agent.sh $WS manually)"
 
 # ── starter devops skill + persona, attached to the workspace (idempotent) ───────
@@ -1257,7 +1257,7 @@ echo "==> Registering + attaching agent to extension-dev workspace…"
 # Skill → Persona → Workspace chain. Both are adopted by name on later runs, never rewritten, so
 # whatever you edit in the UI survives. Non-fatal, like the agent/LLM/KB registrations around it.
 PERSONA_LINE=""
-echo "==> Registering + attaching 'devops' persona to extension-dev workspace…"
+echo "==> Registering + attaching 'devops' persona to agent-dev workspace…"
 if ./scripts/register-persona.sh "$WS"; then
   PERSONA_LINE="
   Persona   devops (skill: devops) → attached — edit both under AI Admin → Skills / Personas"
@@ -1330,7 +1330,7 @@ cat <<EOF
 ✔ Platform ready (provider: $PROVIDER_DESC)
   UI        http://localhost:$UI_PORT     (login: $EMAIL)
   API       $API
-  Workspace extension-dev  ($WS)  ·  agent registered + attached
+  Workspace agent-dev  ($WS)  ·  agent registered + attached
   Token     DUPLO_ADMIN_TOKEN set in .env (permanent)
   License   ${LICENSE_STATUS:-set in .env} (Licensing__Token)$PERSONA_LINE$LLM_LINE$KB_LINE$TF_EXT_LINE
 

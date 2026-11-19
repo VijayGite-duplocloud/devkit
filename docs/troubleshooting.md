@@ -530,7 +530,7 @@ the **Select Scopes** dropdown on **HelpDesk** → **Add Ticket**, and **Create 
 that dialog has a **Skip** button — take Skip, and you are left with a scope that exists, looks
 correct on every listing, and cannot be selected anywhere.
 
-**Fix** — re-open the scope and attach it to **extension-dev** from the same dialog. The sidebar's
+**Fix** — re-open the scope and attach it to **agent-dev** from the same dialog. The sidebar's
 **Scopes** page lists what the current workspace can already use, so a scope missing from that list is
 one that was never attached.
 

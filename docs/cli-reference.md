@@ -77,8 +77,8 @@ On an EC2 host the provider prompt first probes whether the instance role can ac
    happens before the admin token exists.
 10. Mints a permanent admin API token into `DUPLO_ADMIN_TOKEN`, revoking its own prior `dev-kit-admin`
     tokens first (the server caps active tokens per user at 10).
-11. Creates the `extension-dev` workspace if absent.
-12. Creates the `extension-dev-access` permission set and `extension-dev-group`, granting your admin user
+11. Creates the `agent-dev` workspace if absent.
+12. Creates the `agent-dev-access` permission set and `agent-dev-group`, granting your admin user
     UI access to that workspace.
 13. Registers and attaches the agent (`scripts/register-agent.sh`).
 14. Vendors the Terraform agent's source into `extensions/terraform/` if it is not already there
@@ -86,7 +86,7 @@ On an EC2 host the provider prompt first probes whether the instance role can ac
     the platform coming up.
 15. On an Anthropic setup, registers the local model as the System default (`scripts/register-llm.sh`).
 16. Configures the Knowledge Base (`scripts/register-qdrant.sh`): registers the local Qdrant as a provider,
-    makes it selectable from the `extension-dev` workspace, and creates the empty `devkit-docs` collection.
+    makes it selectable from the `agent-dev` workspace, and creates the empty `devkit-docs` collection.
     Never fatal — a Knowledge Base that did not configure does not stop the platform coming up.
 
 Steps 10–16 are each idempotent and skipped when already satisfied. So is step 5: a license already in

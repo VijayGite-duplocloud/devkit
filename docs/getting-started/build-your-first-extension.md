@@ -4,7 +4,7 @@
 `/duplo-extension` in Claude Code, and load it into the platform you already have running.
 
 **What you need first:** [2. Connect AWS](connect-aws.md) — the `aws-readonly` scope, attached to the
-`extension-dev` workspace. The scan on this page reads a real AWS account through that scope, so it is
+`agent-dev` workspace. The scan on this page reads a real AWS account through that scope, so it is
 what makes the dashboard fill with your own buckets instead of nothing.
 
 [3. Connect Kubernetes](connect-kubernetes.md) is **not** needed for this page. Nothing here touches a
@@ -202,7 +202,7 @@ Claude Code does not start building from the paste. It works through the rest of
    agent id, the resource type, the REST route under `extensions/`, and the name of the UI remote.
    Confirm it or change it.
 
-2. **It confirms the scope.** It lists the scopes the `extension-dev` workspace actually has and asks
+2. **It confirms the scope.** It lists the scopes the `agent-dev` workspace actually has and asks
    which to test with. `aws-readonly` from page 2 is the one you want; the specification already tells
    it to take whatever AWS scope is there rather than stopping to ask.
 

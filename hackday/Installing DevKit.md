@@ -89,7 +89,7 @@ Before you close the laptop, confirm all three:
 
 - [ ] `docker compose ps` shows every service **Up**
 - [ ] <http://localhost:4210> loads and you can sign in
-- [ ] You land with the **`extension-dev`** workspace selected
+- [ ] You land with the **`agent-dev`** workspace selected
 
 If all three pass, you're ready for Hack Day.
 

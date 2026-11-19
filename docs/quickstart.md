@@ -50,7 +50,7 @@ docker --version && docker compose version
    later) and `Select LLM provider:` → `Enter 1 or 2:` (`1` anthropic, `2` bedrock) and its key.
 
 4. `./run.sh` prints a `✔ Platform ready` summary when the stack is up. Sign in at
-   <http://localhost:4210> with that email and password. You land with the `extension-dev` workspace
+   <http://localhost:4210> with that email and password. You land with the `agent-dev` workspace
    selected.
 
 You cannot file a ticket yet — a ticket requires a scope, which step 4 creates.
@@ -115,9 +115,9 @@ alone and select your default region → **Create**.
 Creating the scope pops up **Attach Scope to Workspaces**. **Do not press Skip** — a scope that is not
 attached to a workspace never appears on a ticket.
 
-Pick **extension-dev** under **Workspaces** → **Attach**.
+Pick **agent-dev** under **Workspaces** → **Attach**.
 
-![The Attach Scope to Workspaces dialog with extension-dev selected](images/devkit-attach-scope-to-workspaces.png)
+![The Attach Scope to Workspaces dialog with agent-dev selected](images/devkit-attach-scope-to-workspaces.png)
 
 ## 5. Ask the agent
 
