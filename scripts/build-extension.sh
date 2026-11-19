@@ -40,10 +40,16 @@ fi
 [ -f "$DIR/manifest.json" ] || { echo "No manifest.json in $DIR" >&2; exit 1; }
 
 # Delegates to the builder container unless we're already native (see the header). Never returns in
-# the container case.
-[ "$VALIDATE_ONLY" = 1 ] || builder_dispatch scripts/build-extension.sh "$DIR"
+# the container case. --validate-only skips the container and runs the naming gate below on this host, so
+# it needs jq here; without it the gate would report every manifest as invalid JSON.
+if [ "$VALIDATE_ONLY" = 1 ]; then
+  command -v jq >/dev/null 2>&1 || { echo "ERROR: --validate-only runs the naming gate on this host and needs jq, which is not installed." >&2; exit 1; }
+else
+  builder_dispatch scripts/build-extension.sh "$DIR"
+fi
 
-# From here down we are native and the toolchain is present — builder_dispatch guarantees it.
+# From here down the toolchain is present: builder_dispatch guarantees it for a build, and --validate-only has
+# just checked for the one tool it uses.
 
 # Naming gate — enforce the canonical convention BEFORE building (fails fast, no network needed). The platform
 # shares one runtime across all extensions, so every customer-facing name MUST be namespaced under extensions/
@@ -381,8 +387,8 @@ project_refs() {
   local csproj="$1" dir ref
   dir="$(cd "$(dirname "$csproj")" && pwd -P)"
   { tr '\n' ' ' < "$csproj" 2>/dev/null | sed -E 's/<!--([^-]|-[^-])*-->//g' \
-      | grep -oE '<ProjectReference[^>]*Include="[^"]+"' || true; } \
-    | sed -E 's/.*Include="([^"]+)".*/\1/' | tr '\\' '/' \
+      | grep -oE '<ProjectReference[^>]*Include=("[^"]+"|'"'"'[^'"'"']+'"'"')' || true; } \
+    | sed -E 's/.*Include=["'"'"']([^"'"'"']+)["'"'"'].*/\1/' | tr '\\' '/' \
     | while IFS= read -r ref; do
         case "$ref" in
           *'$('*|*'*'*|*'?'*|*';'*) printf '%s\n' "$ref"; continue ;;

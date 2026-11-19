@@ -193,7 +193,7 @@ grep -n "ng-common-lib" package-lock.json
 
 Both the `dependencies` entry and the `node_modules/@duplocloud-internal/ng-common-lib` entry should read
 `file:../../../packages/duplocloud-internal-ng-common-lib-0.8.0.tgz`, with `"version": "0.8.0"` and integrity
-`sha512-kzmxKBUQq1B/mkthuCuqw9fQAOCFn+uX2k1g4vsYqmOsRFQAhftu3kaPmybXSdtR/zz+G4kgieJHJ9+kNSdTIg==`. The entry
+`sha512-e84HQXsKl1/NIUn318GDpop10ypAnZWRENsA9UEHYuYCiBqZ+x72FM4qZeBFoOT5n5uvnGL0oMv3TIKcWhMepA==`. The entry
 also carries `"bundleDependencies": ["ng-block-ui"]`.
 
 ### 4. Install and build
