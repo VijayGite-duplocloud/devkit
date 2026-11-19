@@ -197,20 +197,16 @@ Keep it to this one resource type. Do not add a parent-child hierarchy.
 
 Claude Code does not start building from the paste. It works through the rest of its intake first:
 
-1. **It confirms the name.** It proposes `s3-guard` back to you and says what that name drives — the
-   extension id, the resource type, the REST route under `extensions/`, and the name of the UI remote.
-   Confirm it or change it.
+1. **It asks its questions in one message.** It proposes keeping the name `s3-guard`, offers the saved
+   connections the `extension-dev` workspace has (`aws-readonly` from page 2 is the one you want; the
+   specification already tells it to take whatever AWS connection is there), and asks anything the
+   specification leaves open. The specification is detailed enough that this is mostly confirming its
+   guesses.
 
-2. **It confirms the scope.** It lists the scopes the `extension-dev` workspace actually has and asks
-   which to test with. `aws-readonly` from page 2 is the one you want; the specification already tells
-   it to take whatever AWS scope is there rather than stopping to ask.
-
-3. **It asks anything still genuinely ambiguous.** The specification is detailed enough that this
-   should be short, and it may be nothing at all.
-
-4. **Then it presents one plan.** Not a plan per file — one, covering the whole build: a table of spec
-   fields, a table of result fields, a walkthrough of the UI (where it lands in the left nav, the
-   create form, the list, the Overview and the scan detail), the files it will create under
+2. **Then it presents one plan for the whole build.** It opens with **What you'll get**: a few plain
+   lines on where S3 Security Scan appears in the left menu, what someone fills in, what happens after
+   they save, what the page shows and what delete does. Each default it picked for you follows on its
+   own line. Under **Technical details** come the field tables, the files it will create under
    `extensions/s3-guard/`, and the exact build and deploy commands it intends to run.
 
 Read that plan; it is your one chance to change the shape before anything is written. Then approve it

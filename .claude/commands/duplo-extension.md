@@ -23,7 +23,8 @@ creation) and writes many files — approving each one is tedious. To avoid a st
      provider the agent uses, plus its settings (`.claude/skills/duplo-extension-dev/reference/02-authoring-guide.md`
      → `frontend.setup`).
 
-   Then list the files you'll create under `extensions/<name>/` and the exact build/deploy commands. In the
+   Then list the files you'll create under `extensions/<name>/` and the exact build/deploy commands, starting with the
+   Admin Workspace attach when Step 5 needs one. In the
    `ExitPlanMode` call, declare the Bash permissions the build needs via `allowedPrompts` so the user approves the
    whole implementation **in a single step**, e.g.:
    - "run the dev-kit `scripts/` (build-extension, deploy-extension, register-agent)"
@@ -115,10 +116,8 @@ The Admin Workspace starts with none. So, if provisioning needs credentials:
 1. Use the **Admin Workspace** as `WS` in the listing below: the SDK constant
    `Workspace.AdminWorkspaceId`.
 2. List its scopes with the script below. If a needed provider scope is missing, list all of them
-   (`GET <base>/v1/aiservicedesk/admin/data/scopes`), carry the connection question to Step 4's batch, and — once the user picks one —
-   **attach** it to the Admin Workspace: `GET …/admin/data/workspaces/<WS>`, then `PUT` it back with the ids
-   appended to `scopeIds` (`.claude/skills/duplo-extension-dev/reference/07-scope-credentials.md` → "Creating the
-   connection — the connections kit", step 3).
+   (`GET <base>/v1/aiservicedesk/admin/data/scopes`) and carry the connection question to Step 4's batch. Attaching
+   the chosen one is Step 5's first action: these steps are read-only.
 3. The resource's `spec.scopeIds` must be a subset of the Admin Workspace's `scopeIds`; its add form offers only
    those.
 
@@ -176,6 +175,12 @@ it. Ask AI is opt-in: never offer it unprompted.
 **Do not write code until the plan is approved.**
 
 ## Step 5 — Scaffold + build (hand off to the skill)
+**Admin resource with a connection the Admin Workspace lacks:** attach it first. `GET
+<base>/v1/aiservicedesk/admin/data/workspaces/<WS>`, then `PUT` it back with the chosen id appended to `scopeIds`
+(`.claude/skills/duplo-extension-dev/reference/07-scope-credentials.md` → "Creating the connection — the connections
+kit", step 3), and confirm the `PUT`'s response lists it. Without it the platform drops the id from the test
+resource's `spec.scopeIds` and provisioning runs with no credentials.
+
 Now follow the `duplo-extension-dev` skill — read `.claude/skills/duplo-extension-dev/SKILL.md` and its
 `reference/` docs, then:
 - scaffold into **`extensions/<name>/`** (one dir per extension under `extensions/` — copy the skill's

@@ -23,7 +23,7 @@ DOCS=(docs/quickstart.md docs/getting-started/build-your-first-extension.md)
 BANNED='\b(specs?|results?|resources?|scopes?|providers?|provisioning|modes?|crud|endpoints?|controllers?|fe|section ids?|origintypes?|remotes?)\b'
 
 # The "Talking to the user" subsection: from its heading to the next ## or ### heading.
-talking() { awk '/^### Talking to the user/{on=1; print; next} on && /^##{1,2}#? /{exit} on' "$SKILL"; }
+talking() { awk '/^### Talking to the user/{on=1; print; next} on && /^##+ /{exit} on' "$SKILL"; }
 
 # Prints the cells of every table column whose header is exactly "$1", one per line.
 column_cells() {
@@ -75,8 +75,13 @@ talking | grep "^| One or many" | grep -q "only uses" && ok || bad "one-or-many 
 t "SKILL.md no longer asks for a menu 'section id'"
 grep -qi "section id /" "$SKILL" && bad "the 'section id / top-level / none' question is still in $SKILL" || ok
 
-t "SKILL.md copies the scaffold from a real path"
-grep -q 'dirname "\$0"' "$SKILL" && bad "\$(dirname \"\$0\") resolves to the shell in Claude's Bash" || ok
+t "SKILL.md copies the scaffold from the repo root, wherever the shell is"
+if grep -q 'dirname "\$0"' "$SKILL"; then bad "\$(dirname \"\$0\") resolves to the shell in Claude's Bash"
+elif ! grep -B2 'templates/helloworld" "extensions/<name>"' "$SKILL" | grep -q 'git rev-parse --show-toplevel'; then
+  bad "the template copy is not anchored to the repo root"
+elif grep -q "scaffold into the ticket workdir instead" "$SKILL"; then
+  bad "SKILL.md still sends the in-platform scaffold to the ticket workdir, where the template is absent"
+else ok; fi
 
 t "SKILL.md does not call the public devkit repo private"
 grep -q "PRIVATE" "$SKILL" && bad "'PRIVATE' still in $SKILL" || ok
@@ -95,6 +100,18 @@ if step 2 | grep -q "for the user to"; then bad "Step 2 still asks the user to c
 elif step 3 | grep -q "Which saved connection should I use"; then bad "Step 3 still asks for the connection"
 elif ! step 4 | grep -qi "saved connection"; then bad "Step 4's batch does not carry the connection question"
 elif grep -q "ask which one(s) to use" "$CMD"; then bad "admin path still asks which scope(s) in jargon"
+else ok; fi
+
+t "the admin Workspace attach is Step 5's first action, after the plan is approved"
+if step 3 | grep -q "PUT"; then bad "Step 3 still writes the Admin Workspace during read-only planning"
+elif ! step 5 | grep -q "PUT"; then bad "Step 5 does not own the Admin Workspace attach"
+else ok; fi
+
+t "the first-extension guide walks the one-batch intake"
+g=docs/getting-started/build-your-first-extension.md
+sec=$(awk '/^## 4\.5/{on=1} on && /^## 4\.6/{exit} on' "$g")
+if printf '%s\n' "$sec" | grep -q "It confirms the scope"; then bad "4.5 still has a separate scope step"
+elif ! printf '%s\n' "$sec" | grep -q "What you'll get"; then bad "4.5 does not describe the What you'll get summary"
 else ok; fi
 
 t "the command links reference guides by repo path"

@@ -277,9 +277,11 @@ In a **clone-and-own repo** (adopted via `scripts/change_git_owner.sh` or `scrip
 extension lives in its own **`extensions/<name>/`** dir. Scaffold from the bundled template (skip if a starter was
 already seeded — then adapt what's there):
 ```bash
+cd "$(git rev-parse --show-toplevel)"   # the repo root; in-platform, the clone the bootstrap made
 [ -d "extensions/<name>" ] || cp -r ".claude/skills/duplo-extension-dev/templates/helloworld" "extensions/<name>"
 ```
-(In-platform inside a provisioning ticket, scaffold into the ticket workdir instead — same steps, different dir.)
+In-platform the bootstrap clones the dev-kit (or the user's repo) into the ticket workdir and works from that clone's
+root, so `extensions/<name>/` and the template are both inside it.
 
 Adapt inside `extensions/<name>/` — rename `HelloWorld`→`<Name>` consistently **across backend AND frontend**
 (the build fails on leftover `HelloWorld`/`HelloService`/`hw-` identifiers). Per [02-authoring-guide](reference/02-authoring-guide.md):
