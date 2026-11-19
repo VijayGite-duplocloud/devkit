@@ -2,7 +2,7 @@
 # Build an extension into <dir>/dist/extension.zip, against the locally-running platform's SDK feed.
 # Mirrors the duplo-extension-dev skill (fetch SDK → dotnet publish → npm build → zip).
 #
-# The build runs inside the builder container (.NET SDK 8 + Node 22) so Docker Compose is the only
+# The build runs inside the builder container (.NET SDK 10 + Node 22) so Docker Compose is the only
 # prerequisite. Pass --native, or set DUPLO_BUILD_NATIVE=1, to use a toolchain you installed yourself.
 # A build already running inside a container (e.g. the agent's) stays native automatically — see
 # scripts/_builder.sh.
@@ -11,30 +11,37 @@
 # into the build container, so anything outside it does not exist in there. `--native` has no such limit
 # and takes a path anywhere on disk.
 #
-# Usage: ./scripts/build-extension.sh [--native] <extension-dir>   # e.g. ./extension or samples/helloworld
+# Usage: ./scripts/build-extension.sh [--native] [--validate-only] <extension-dir>   # e.g. ./extension or samples/helloworld
+# --validate-only runs just the manifest/naming gate (no SDK fetch, no builder, no build) and exits.
 set -euo pipefail
-# _builder.sh is sourced before the cd so the license path resolves against the caller's directory, not the repo
-# root. It defines functions only, and builder_dispatch (below) is what needs _target.sh sourced first.
+# _builder.sh is sourced before the cd so the license path and the ArmDot directory resolve against the caller's
+# directory, not the repo root. It defines functions only, and builder_dispatch (below) is what needs _target.sh
+# sourced first.
 # shellcheck source=scripts/_builder.sh
 source "$(dirname "$0")/_builder.sh"  # → native, or re-launch this build in the builder container
 builder_resolve_license || exit 1
+# An empty DUPLO_ARMDOT_DIR is left for builder_dispatch, which reads .env first and refuses it there if still unset.
+[ -z "${DUPLO_ARMDOT_DIR:-}" ] || builder_resolve_armdot_dir || exit 1
 cd "$(dirname "$0")/.."
 
 # Strip --native before the positional arg is read, so it works in either order.
-for a in "$@"; do shift; case "$a" in --native) DUPLO_BUILD_NATIVE=1 ;; *) set -- "$@" "$a" ;; esac; done
+VALIDATE_ONLY=0
+for a in "$@"; do shift; case "$a" in --native) DUPLO_BUILD_NATIVE=1 ;; --validate-only) VALIDATE_ONLY=1 ;; *) set -- "$@" "$a" ;; esac; done
 
-DIR="${1:?usage: build-extension.sh [--native] <extension-dir>}"
+DIR="${1:?usage: build-extension.sh [--native] [--validate-only] <extension-dir>}"
 DIR="${DIR%/}"
-# shellcheck source=scripts/_target.sh
-source "$(dirname "$0")/_target.sh"   # → BASE_URL (+ TOKEN) from .env / env per DUPLO_TARGET
-# shellcheck source=scripts/_sdk_digest.sh
-source "$(dirname "$0")/_sdk_digest.sh"  # → sdk_digest, stamped into the bundle manifest beside sdkVersion
-BASE_URL="${BASE_URL%/}"               # tolerate a trailing slash in DUPLO_HOST (avoids // in URLs)
+if [ "$VALIDATE_ONLY" != 1 ]; then
+  # shellcheck source=scripts/_target.sh
+  source "$(dirname "$0")/_target.sh"   # → BASE_URL (+ TOKEN) from .env / env per DUPLO_TARGET
+  # shellcheck source=scripts/_sdk_digest.sh
+  source "$(dirname "$0")/_sdk_digest.sh"  # → sdk_digest, stamped into the bundle manifest beside sdkVersion
+  BASE_URL="${BASE_URL%/}"               # tolerate a trailing slash in DUPLO_HOST (avoids // in URLs)
+fi
 [ -f "$DIR/manifest.json" ] || { echo "No manifest.json in $DIR" >&2; exit 1; }
 
 # Delegates to the builder container unless we're already native (see the header). Never returns in
 # the container case.
-builder_dispatch scripts/build-extension.sh "$DIR"
+[ "$VALIDATE_ONLY" = 1 ] || builder_dispatch scripts/build-extension.sh "$DIR"
 
 # From here down we are native and the toolchain is present — builder_dispatch guarantees it.
 
@@ -72,6 +79,9 @@ done < <(jq -r '.frontend.menus // [] | .. | objects | .relativeUrl? // empty' "
 if jq -e '.frontend.menu' "$MANIFEST" >/dev/null 2>&1; then
   echo "  ✗ legacy 'frontend.menu' is deprecated — use the 'frontend.menus' array" >&2; viol=1
 fi
+# shellcheck source=scripts/validate-header-actions.sh
+source "$(dirname "$0")/validate-header-actions.sh"
+validate_header_actions "$MANIFEST" || viol=1
 while IFS= read -r m; do
   name=$(printf '%s' "$m" | sed -E 's/.*BsonCollection\("([^"]*)".*/\1/')
   case "$name" in extension_*) ;; *)
@@ -137,6 +147,8 @@ while IFS=$'\t' read -r u sc; do
 done < <(jq -r '(.frontend.routes // []) as $r | .frontend.menus // [] | .[] | (.scope // "workspace") as $s
   | [.. | objects | .relativeUrl? // empty] | .[] as $u
   | select(([$r[] | select(.path == $u) | (.scope // "workspace")] | index($s)) == null) | "\($u)\t\($s)"' "$MANIFEST")
+# frontend.setup feeds the portal's "Agent Setup" nav; the portal silently ignores an invalid entry.
+scripts/validate-setup.sh "$MANIFEST" || viol=1   # cwd is the repo root (cd above)
 # A plain controller (ControllerBase/Controller, e.g. a read-only workspace view of an admin resource) gets no
 # authorization unless it says so: the host has no fallback policy, and only [Authorize] runs the tenant policy
 # (workspace membership; Admin Workspace grants on /aiservicedesk/admin). Resource controllers inherit it from their base.
@@ -188,11 +200,14 @@ case "$DIR" in
   *samples/*|*templates/*) ;;
   *)
     if [ -d "$DIR/frontend/src" ]; then
-      hits=$(grep -rnE 'HelloService|HelloWorld|hw-(add|list|view|root)|hello\.service' "$DIR/frontend/src" 2>/dev/null || true)
+      hits=$(grep -rnE 'HelloService|HelloWorld|Hello World|hw-(add|list|view|root|setup)|hello\.service|HELLO_WORLD_TYPE|HelloSettings|helloworld[./]settings|type:[[:space:]]*['"'"'"]helloworld['"'"'"]' "$DIR/frontend/src" 2>/dev/null || true)
       if [ -n "$hits" ]; then
         echo "  ✗ frontend still has template 'Hello'/'hw-' identifiers — rename them to your resource:" >&2
         printf '%s\n' "$hits" | head -8 | sed 's/^/      /' >&2; viol=1
       fi
+    fi
+    if [ "$(jq -r '(.frontend.setup.relativeUrl)? // empty' "$MANIFEST" 2>/dev/null)" = "extensions/helloworld-setup" ]; then
+      echo "  ✗ frontend.setup.relativeUrl is still the template's 'extensions/helloworld-setup' — use extensions/<idName>-setup (reference/02-authoring-guide.md)" >&2; viol=1
     fi ;;
 esac
 
@@ -201,6 +216,7 @@ if [ "$viol" -ne 0 ]; then
   exit 1
 fi
 echo "    naming OK"
+[ "$VALIDATE_ONLY" != 1 ] || exit 0
 
 # --- Which SDKs to build against. ----------------------------------------------------------------------------
 # Empty (the default) keeps today's single build from the running host's SDK, stamped with its digest, at
@@ -212,6 +228,34 @@ SDK_VERSIONS=()
 for v in $(printf '%s' "${DUPLO_SDK_VERSIONS:-}" | tr ',' ' '); do
   [ -n "$v" ] && SDK_VERSIONS+=("$v")
 done
+
+# The SDK's reference assemblies fix the runtime an extension has to target: 1.2.0 moved the host to .NET 10, and an
+# assembly built for net10.0 does not load on a .NET 8 host, while one built for net8.0 loads on both. The target
+# framework therefore follows the SDK version rather than the csproj, so one checkout builds for whichever host it
+# points at, and the installer, which matches a build to a host by SDK version, only ever hands a host a build it
+# can load. A prerelease suffix is ignored, and the parts compare as numbers, so 1.10 sorts after 1.2.
+target_framework_for() {
+  local v="${1%%-*}" major minor
+  major="${v%%.*}"; minor="${v#*.}"; minor="${minor%%.*}"
+  if [ "${major:-0}" -gt 1 ] 2>/dev/null || { [ "${major:-0}" -eq 1 ] && [ "${minor:-0}" -ge 2 ]; } 2>/dev/null; then
+    echo net10.0
+  else
+    echo net8.0
+  fi
+}
+# An older SDK cannot build a newer framework, and the failure it gives is a NETSDK error deep in the publish. The
+# pinned toolchain image moves in a reviewed change, so a build that needs more than it ships says so up front.
+require_dotnet_for() {
+  local tfm="$1" sdk_ver="$2" need have
+  need="${tfm#net}"; need="${need%%.*}"
+  have="$(dotnet --version 2>/dev/null | cut -d. -f1)"
+  if [ -n "$have" ] && [ "$have" -lt "$need" ] 2>/dev/null; then
+    echo "ERROR: SDK $sdk_ver needs a $tfm build, which needs .NET SDK $need, and this toolchain is .NET SDK $have." >&2
+    echo "       In the builder container, set BUILDER_IMAGE to a toolchain that ships .NET SDK $need, or build the one in" >&2
+    echo "       build/Dockerfile.builder. With --native, install .NET SDK $need." >&2
+    exit 1
+  fi
+}
 
 CSPROJ=$(find "$DIR/backend" -maxdepth 1 -name '*.csproj' | head -1)
 [ -n "$CSPROJ" ] || { echo "No .csproj under $DIR/backend" >&2; exit 1; }
@@ -227,6 +271,8 @@ echo "==> Building frontend"
 ( cd "$DIR/frontend" \
   && if [ -f package-lock.json ]; then npm ci; else npm install; fi \
   && npm run build )
+validate_header_action_exposes "$MANIFEST" "$DIR/frontend/dist/remoteEntry.json" \
+  || { echo "ERROR: a frontend.headerActions expose is missing from the built remoteEntry.json." >&2; exit 1; }
 
 # --- Obfuscation setup: once, SDK-independent (it depends only on ARMDOT_LICENSE_FILE_PATH). -----------------
 # The baseline (built per version inside build_one) lives under backend/, inside the compile root. A copy left by
@@ -234,6 +280,9 @@ echo "==> Building frontend"
 # with CS0579, so purge it up-front, after each version's use, and on exit via the trap. ArmDot obfuscation of the
 # extension's own assembly is on only when ARMDOT_LICENSE_FILE_PATH names a license. The import rides in through a
 # Directory.Build.targets dropped beside the csproj for this build, so the extension's own project file never changes.
+# The ArmDot build files themselves (props, targets, attributes and that template) are not in this repository: they
+# are read from DUPLO_ARMDOT_DIR, which DuploCloud's release action fills from the private shared repository, and
+# which a laptop build points at a checkout of it.
 BASELINE="$DIR/backend/_sdkbaseline"
 rm -rf "$BASELINE"
 OBFUSCATE=0
@@ -291,8 +340,18 @@ check_refs() {
   done < <(project_refs "$from")
 }
 if [ -n "${ARMDOT_LICENSE_FILE_PATH:-}" ]; then
-  ARMDOT_VERSION="$(sed -nE 's/.*<ArmDotEngineVersion>([^<]+)<.*/\1/p' build/ArmDot.Obfuscation.props)"
-  [ -n "$ARMDOT_VERSION" ] || { echo "ERROR: no ArmDotEngineVersion in build/ArmDot.Obfuscation.props" >&2; exit 1; }
+  # Already absolute and checked by builder_resolve_armdot_dir at the top, before the cd.
+  ARMDOT_DIR="${DUPLO_ARMDOT_DIR:-}"
+  for f in ArmDot.Obfuscation.props ArmDot.Obfuscation.targets ArmDotObfuscationAssemblyInfo.cs Directory.Build.targets.template; do
+    [ -n "$ARMDOT_DIR" ] && [ -f "$ARMDOT_DIR/$f" ] && continue
+    echo "ERROR: ARMDOT_LICENSE_FILE_PATH is set, but DUPLO_ARMDOT_DIR does not name a directory holding the ArmDot build files" >&2
+    echo "       (DUPLO_ARMDOT_DIR=${ARMDOT_DIR:-unset}, missing $f). They live under armdot/ in duplocloud-internal/.github:" >&2
+    echo "       DuploCloud's release action fetches them, and a laptop build points DUPLO_ARMDOT_DIR at a checkout of them." >&2
+    exit 1
+  done
+  ARMDOT_DIR="$(cd "$ARMDOT_DIR" && pwd -P)"
+  ARMDOT_VERSION="$(sed -nE 's/.*<ArmDotEngineVersion>([^<]+)<.*/\1/p' "$ARMDOT_DIR/ArmDot.Obfuscation.props")"
+  [ -n "$ARMDOT_VERSION" ] || { echo "ERROR: no ArmDotEngineVersion in $ARMDOT_DIR/ArmDot.Obfuscation.props" >&2; exit 1; }
   # Only a project that imports the targets file dropped below is obfuscated, so a referenced project outside backend/,
   # or one whose own Directory.Build.targets shadows the dropped file, publishes plain into a bundle whose manifest
   # says obfuscated. Refuse that rather than overclaim. Every reference reachable from the entry project is checked.
@@ -309,17 +368,17 @@ if [ -n "${ARMDOT_LICENSE_FILE_PATH:-}" ]; then
     echo "  build without obfuscation." >&2
     exit 1
   fi
-  # A file identical to the template is this script's own leftover from a killed build, so it is replaced.
-  # Anything else is the extension's own and is never overwritten.
-  if [ -e "$OBF_TARGETS" ] && ! cmp -s build/Directory.Build.targets.template "$OBF_TARGETS"; then
+  # A file identical to the template is this script's own leftover from a killed build, so it is replaced. Anything
+  # else is the extension's own and is never overwritten.
+  if [ -e "$OBF_TARGETS" ] && ! cmp -s "$ARMDOT_DIR/Directory.Build.targets.template" "$OBF_TARGETS"; then
     echo "ERROR: $OBF_TARGETS already exists. The obfuscation import is dropped there for the build," >&2
     echo "       so move the extension's own targets into its csproj first." >&2
     exit 1
   fi
   trap 'rm -rf "$BASELINE" 2>/dev/null || true; rm -f "$OBF_TARGETS"' EXIT
-  cp build/Directory.Build.targets.template "$OBF_TARGETS"
+  cp "$ARMDOT_DIR/Directory.Build.targets.template" "$OBF_TARGETS"
   OBFUSCATE=1
-  OBFUSCATE_PROPS=(-p:DuploObfuscate=true -p:ArmDotLicenseFile="$ARMDOT_LICENSE_FILE_PATH" -p:DuploDevkitBuildDir="$PWD/build/")
+  OBFUSCATE_PROPS=(-p:DuploObfuscate=true -p:ArmDotLicenseFile="$ARMDOT_LICENSE_FILE_PATH" -p:DuploDevkitBuildDir="$ARMDOT_DIR/")
 fi
 
 # build_one <sdk-version> <sdk-digest> <out-dir>: publish the backend against one SDK version (obfuscated when a
@@ -333,10 +392,21 @@ build_one() {
   case "$out" in /*) ;; *) out="$PWD/$out" ;; esac
   rm -rf "$out"; mkdir -p "$out"
 
+  local tfm; tfm="$(target_framework_for "$sdk_ver")"
+  echo "    [$sdk_ver] target framework: $tfm"
+  require_dotnet_for "$tfm" "$sdk_ver"
+
   [ "$OBFUSCATE" = 1 ] && echo "==> [$sdk_ver] Obfuscating the extension assembly with ArmDot $ARMDOT_VERSION"
   echo "==> [$sdk_ver] Building backend ($(basename "$CSPROJ"))"
-  ( cd "$DIR/backend" && dotnet publish "$(basename "$CSPROJ")" -c Release -o "$out/backend" -p:DuploSdkVersion="$sdk_ver" \
-      "${OBFUSCATE_PROPS[@]}" )
+  # The framework is passed as a property so no csproj changes when the host moves. A property given to dotnet publish
+  # does not reach the restore it runs first, which then resolves the csproj's own framework and the publish fails
+  # with NETSDK1005, so restore runs on its own with the same properties and publish skips its own. The obfuscation
+  # properties go to the restore too: they are what makes Directory.Build.targets import the ArmDot packages, and a
+  # publish that skips its own restore can only load what the restore resolved.
+  ( cd "$DIR/backend" && dotnet restore "$(basename "$CSPROJ")" -p:TargetFramework="$tfm" -p:DuploSdkVersion="$sdk_ver" \
+      "${OBFUSCATE_PROPS[@]}" \
+      && dotnet publish "$(basename "$CSPROJ")" --no-restore -c Release -o "$out/backend" -p:TargetFramework="$tfm" \
+           -p:DuploSdkVersion="$sdk_ver" "${OBFUSCATE_PROPS[@]}" )
 
   # The extension is hot-loaded into a child AssemblyLoadContext that serves the whole SDK closure from the host's
   # Default context, so those DLLs must not ship in the bundle (they only bloat it past the ingress limit). Compute
@@ -346,7 +416,7 @@ build_one() {
   cat > "$BASELINE/_sdkbaseline.csproj" <<CSPROJ_EOF
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>$tfm</TargetFramework>
     <UseAppHost>false</UseAppHost>
   </PropertyGroup>
   <ItemGroup>
