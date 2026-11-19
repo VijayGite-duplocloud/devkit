@@ -240,6 +240,66 @@ its requirements file here serve the composite `extension-sign` action only. A r
 action's own copy of `extension-sign.py` and its own pinned requirements, which live in `duplocloud/actions`,
 under that repository's review.
 
+## Moving an existing repository onto this flow
+
+This section is for a DuploCloud repository that still carries the earlier `release.yml`, the one that ran
+`scripts/release-extensions.sh` behind a `.github/extension-publishers.json` allowlist. That file no longer
+grants anything: the publisher role trusts a repository through ai-release's Terraform, and a repository that
+lists itself in the old file fails at the credentials step instead of skipping the upload. The owner's part is
+three steps. Two more are done once per repository by the release team, and most repositories on the first
+extensions release already have them.
+
+### What the owner does
+
+1. **Settle the manifest id.** The console accepts an id only inside a namespace the publishing team holds.
+   DuploCloud's team holds `duplo`, `com.duplo`, `com.duplocloud`, `net.duplo` and `net.duplocloud`; the
+   marketplace release tickets ask for `com.duplocloud.<name>`. Changing an id makes the extension a new record
+   to the console and to every installer, so decide it before the record below exists, and treat installs of
+   the old id as a separate migration.
+2. **Make sure the console record exists.** Under **Agents > Agents** in the prod console, an agent whose
+   manifest id equals the `id` in `manifest.json`, under the publishing team, with its categories, status and
+   access set. Creating it takes a platform owner. The action finds the record by that id and fails the job
+   when none exists.
+3. **Upgrade the devkit.** Run `./scripts/upgrade_dev_kit.sh --version dev` from the repository root. The
+   action-based `release.yml` is on devkit's `dev` branch; `main`, the script's default, still carries the
+   earlier workflow until `dev` is promoted, after which the default is enough (see
+   [upgrading.md](upgrading.md)). The upgrade replaces `.github/` and `scripts/` wholesale, so it brings the
+   new workflow, removes `extension-publishers.json` and refreshes `build-extension.sh`, and it overwrites the
+   framework's files in `build/` while leaving any of your own there. Your extensions, their project files and
+   your own docs are untouched. Open the pull request and let Extension CI run; it builds the bundle the way
+   the release will. Merge to `main`, and the release job cuts one GitHub Release per build, uploads it and
+   registers it as an unpublished version on the console record. The job's log ends with how many builds it
+   released, resumed and failed, with each release's URL above that line, and the repository's Releases page
+   lists them. A platform owner publishes the version once it is checked.
+
+### What the release team does once per repository
+
+These are in place for the repositories that released through the action already. A repository that is new to
+the flow needs both, and the release job says which is missing before the build.
+
+- **The publisher role's trust.** The AWS role's trust policy names each repository whose `main` may assume it,
+  in `extension_publisher_repositories` in ai-release's `terraform/prod/main.tf` (see "The role trust"
+  above). A repository joins through an ai-release PR that adds it with its OIDC subject prefix, read with
+  `gh api repos/<org>/<repo>/actions/oidc/customization/sub --jq .sub_claim_prefix`, and an ai-release
+  maintainer applies it. A repository not yet listed fails at the credentials step, before anything is built.
+- **The per-repository secret grants.** `CONSOLE_SIGNING_KEY` and `CONSOLE_API_KEY` are organization secrets
+  granted per repository, so an organization admin adds the repository to their lists. `CONSOLE_SIGNING_CERT`,
+  `EXTENSION_PUBLISHER_ROLE_ARN` and `ARMDOT_LICENSE_KEY` are organization-wide and need nothing. `DUPLO_HOST`
+  and `DUPLO_TOKEN` stay the repository's own; the token expires, so a release that fails at "Fetching SDK
+  feed" with a 401 needs a fresh one.
+
+### The host's SDK line
+
+A host on extension SDK 1.2 or later ships `net10.0` reference assemblies only. On `dev` the build picks the
+target framework from the host's SDK version and passes it to restore and publish, so a project file that
+names `net8.0` builds `net10.0` against a 1.2 host without an edit, and a `net8.0` build for a host on 1.0 or 1.1
+loads on both. [upgrading.md](upgrading.md#net-10-and-the-target-framework) has the detail. What a release
+still waits on is the toolchain the build runs in: the image pinned by digest in `scripts/_builder.sh` and
+`docker-compose.yml` has to ship the .NET 10 SDK, or the build stops before publishing and names the SDK it
+found. That pin moves in its own change once the image is published, and `release.yml` sets no
+`BUILDER_IMAGE`, so until the pin on the branch you upgrade from names a .NET 10 image, a release against a
+1.2 host fails there.
+
 ## The channels bucket and the license server
 
 In DuploCloud's organizations a signed build uploads to
