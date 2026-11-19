@@ -35,7 +35,8 @@ In every organization the build is uploaded and registered with the console as a
 of the record whose manifest id equals the bundle's. A version stays unpublished, for a platform owner to
 publish once the build has been verified, unless the run was dispatched with `publish` (see "Publishing on
 register"). In `duplocloud` and `duplocloud-internal` the release also carries `extension.zip.sig`, the
-bundle is obfuscated, and the upload goes to the channels bucket through the publisher role. Elsewhere the
+bundle is obfuscated, and a `main` release's upload goes to the channels bucket through the publisher role
+(a `dev` or `rc` release goes through the dev console instead, see the next section). Elsewhere the
 bundle is plain, signed only when the repository supplies its own key and certificate, and the upload goes
 through a URL the console issues for the console key, so a customer's repository needs nothing from
 DuploCloud beyond that key.
