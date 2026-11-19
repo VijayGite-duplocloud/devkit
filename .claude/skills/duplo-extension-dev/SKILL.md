@@ -40,7 +40,8 @@ from a built-in resource (Network, Namespace, …).
 > [19-detail-page](reference/19-detail-page.md) — the detail-page shell, the lifecycle rail, per-resource phases per mode ·
 > [20-ui-library](reference/20-ui-library.md) — every `ng-common-lib` export, a "need X → use Y" picker, verified recipes, the connections kit, and what works in a remote ·
 > [21-theming](reference/21-theming.md) — Light/Dark and brand themes: the `$g-*` colour names, rules, editors and charts.
-> [21-admin-resources](reference/21-admin-resources.md) — **admin-scoped** resources: `AdminResourcesController`, the admin route, the Admin Workspace, AI Admin menus/routes, and the skill write-back URL.
+> [21-admin-resources](reference/21-admin-resources.md) — **admin-scoped** resources: `AdminResourcesController`, the admin route, the Admin Workspace, AI Admin menus/routes, and the skill write-back URL. ·
+> [23-secrets](reference/23-secrets.md) — a Spec/Result field that holds a password/token/key: `[SecretValue]`/`[AgentSecretValue]`, encryption-at-rest, the reveal endpoint, write-only forms.
 
 > **Every dev-kit extension is TYPED — there is no archetype choice.** A typed extension ships a compiled
 > .NET DLL (`manifest.archetype = "typed"`) with the resource's own controller/route/collection, an Angular
@@ -119,7 +120,14 @@ Settle before building (derive, else ask — **after** listening):
     controller in the SDK) and is then administrators-only — see reference/21.
   Admin needs a host SDK that ships `AdminResourcesController`; the build probes for it. Full rules:
   [21-admin-resources](reference/21-admin-resources.md).
-- **Spec fields** — each with name, type, and required/optional. **Result fields** — same.
+- **Spec fields** — each with name, type, and required/optional. **Result fields** — same. For every field,
+  ask: is this a password/API token/key, or anything else sensitive? Don't wait for the user to volunteer
+  it — a field named `apiKey`/`password`/`token`/`secret` (or described that way) always gets this question.
+  If yes, settle whether it's actually an external-system credential (→ a Scope/Credential,
+  [07-scope-credentials](reference/07-scope-credentials.md), not a raw field) or an inherent attribute of
+  the resource itself (→ [23-secrets](reference/23-secrets.md): `[SecretValue]`/`[AgentSecretValue]`,
+  encryption-at-rest, a reveal endpoint, a write-only edit form) — present the field table with a
+  **Sensitive?** column so the answer is visible when you ask for approval.
 - **Provisioning MODE** — decide HOW this resource is provisioned. **Do not default to an agent skill.** Pick by
   what the work actually is (derive from the requirement; tell the user your pick by its plain name from
   [Talking to the user](#talking-to-the-user)):
@@ -192,7 +200,8 @@ The list above is your checklist; its words are yours. The user knows their prob
 they want to see afterwards, who manages it, which outside system it talks to. Settle the checklist from that, and
 put questions to the user in their words, once, in one batch:
 
-- **Always ask:** the Name, Spec fields and Result fields rows, each as your guess for the user to confirm.
+- **Always ask:** the Name, Spec fields and Result fields rows, each as your guess for the user to confirm, and the
+  Sensitive fields row for any field that looks like a password, token or key.
   In-platform, when these three are all the batch holds, they ride the pause below instead of a separate ask.
 - **Also ask:** any other row where the requirement points two ways and a wrong guess changes what gets built.
 - **Every other row:** state your choice as a default in the summary below. The user approves the summary before
@@ -207,6 +216,7 @@ endpoint, controller, section id), except under **Technical details** in the sum
 | Extension scope | "Who manages these: people in a workspace, or only platform admins?" | people in a workspace |
 | Provider scopes for testing | "To test this I need to reach Jenkins. Which saved connection should I use?" List them by name, plus "it doesn't need one". | none when the work touches no outside system. In-platform the create form's Scopes field answers this and the ticket cannot list connections: when the field is empty and the work needs one, state "No Jenkins connection was picked, so I'll build it without testing against Jenkins." |
 | Spec fields | "When someone adds one, what do they fill in? My guess: job name (required), branch (default main)." | the requirement's Inputs section |
+| Sensitive fields | Per field that looks like a password, token or key: "Should **API key** stay hidden once it's saved, like a password? Is it how this signs in to Jenkins, or does each job have its own?" | hidden; signing in to the outside system belongs to its connection |
 | Result fields | "When it's done, what should the page show? My guess: build number, status, duration, a link to the log." | the requirement's Result section |
 | Provisioning mode | Never asked. State it: "This is a fixed set of steps, so it runs as a **background job** with no AI. Tell me if it needs AI judgement." | derived (table below) |
 | Custom endpoints | "Besides add, edit and delete, does it need any buttons? For example **Run now** or **View logs**." | none |
@@ -235,10 +245,10 @@ per resource for multi-resource extensions:
 
 1. **What you'll get**: five to eight plain lines. Its name, where it appears in the menu (AI DevOps or AI Admin), what someone
    fills in, what happens after they save (name the pattern by its plain name; in Agent mode, that the add form
-   tells users AI does the work), what the page shows, what delete does, and what an admin sets up once.
+   tells users AI does the work), what the page shows, which values stay hidden, what delete does, and what an admin sets up once.
 2. One line per default the user has not confirmed, so they can object.
-3. **Technical details**, as a structured shape: a **Spec** field table (name · type · required/optional), a
-   **Result** field table (name · type), the **extension scope** (workspace / admin) and the **provisioning mode**,
+3. **Technical details**, as a structured shape: a **Spec** field table (name · type · required/optional · sensitive?), a
+   **Result** field table (name · type · sensitive?), the **extension scope** (workspace / admin) and the **provisioning mode**,
    each with a one-line reason, and the **detail view's shape** — the **lifecycle phases** this resource goes through
    (label + the status/result field that drives each; [19-detail-page](reference/19-detail-page.md) → "Deriving
    phases") and the **Result tabs** (Overview at minimum; name each further tab;

@@ -14,11 +14,14 @@
 # Usage: ./scripts/build-extension.sh [--native] [--validate-only] <extension-dir>   # e.g. ./extension or samples/helloworld
 # --validate-only runs just the manifest/naming gate (no SDK fetch, no builder, no build) and exits.
 set -euo pipefail
-# _builder.sh is sourced before the cd so the license path resolves against the caller's directory, not the repo
-# root. It defines functions only, and builder_dispatch (below) is what needs _target.sh sourced first.
+# _builder.sh is sourced before the cd so the license path and the ArmDot directory resolve against the caller's
+# directory, not the repo root. It defines functions only, and builder_dispatch (below) is what needs _target.sh
+# sourced first.
 # shellcheck source=scripts/_builder.sh
 source "$(dirname "$0")/_builder.sh"  # → native, or re-launch this build in the builder container
 builder_resolve_license || exit 1
+# An empty DUPLO_ARMDOT_DIR is left for builder_dispatch, which reads .env first and refuses it there if still unset.
+[ -z "${DUPLO_ARMDOT_DIR:-}" ] || builder_resolve_armdot_dir || exit 1
 cd "$(dirname "$0")/.."
 
 # Strip --native before the positional arg is read, so it works in either order.
@@ -213,6 +216,87 @@ if [ "$viol" -ne 0 ]; then
   exit 1
 fi
 echo "    naming OK"
+
+# Secret-field gate — heuristic, NOT exhaustive (see reference/23-secrets.md). A `string`/`string?`
+# property whose name looks like a password/token/key and carries no [SecretValue] attribute within the
+# few lines above it fails the build — the awk below only matches `\[SecretValue`, so a property carrying
+# ONLY [AgentSecretValue] (no [SecretValue]) still fails this gate too. That's deliberate, not a bug: such
+# a field would still leak in full in every GET/List/Create/Update/PATCH response, which [AgentSecretValue]
+# alone does nothing to prevent. This catches the common case — a field added without ever reading
+# 23-secrets.md — not every shape a secret can take: it does not see fields renamed
+# away from these keywords, secrets stuffed into AdditionalCustomSpec/ExtraConfigs (untyped — no attribute
+# is possible there regardless), or non-string secret types. A false positive (e.g. a non-secret field that
+# happens to contain "secret", like a resource ARN) is silenced with a same-block comment:
+#   // secret-field-exception: <reason this field is not actually sensitive>
+echo "==> Checking for un-attributed secret-looking fields (reference/23-secrets.md)"
+if [ -d "$DIR/backend" ]; then
+  cs_files=$(find "$DIR/backend" -name '*.cs' -not -path '*/obj/*' -not -path '*/bin/*' -not -path '*/sdk-packages/*' -not -path '*/_sdkbaseline/*')
+  if [ -n "$cs_files" ]; then
+    secret_lint_out=$(awk '
+      { lines[FILENAME, FNR] = $0 }
+      /^[[:space:]]*public[[:space:]]+string\??[[:space:]]+[A-Za-z0-9_]+[[:space:]]*\{[[:space:]]*get;[[:space:]]*set;/ {
+        name = $0
+        sub(/.*public[[:space:]]+string\??[[:space:]]+/, "", name)
+        sub(/[[:space:]]*\{.*/, "", name)
+        lname = tolower(name)
+        if (lname ~ /password|secret|token|apikey|api_key|credential|passphrase|privatekey|accesskey/) {
+          covered = 0
+          start = (FNR - 6 < 1 ? 1 : FNR - 6)
+          for (i = start; i <= FNR; i++) {
+            if (lines[FILENAME, i] ~ /\[SecretValue/ || lines[FILENAME, i] ~ /secret-field-exception:/) { covered = 1; break }
+          }
+          if (!covered) {
+            printf "  ✗ %s:%d: property \"%s\" looks like a secret but has no [SecretValue] attribute (or a // secret-field-exception: comment) nearby\n", FILENAME, FNR, name
+            viol = 1
+          }
+        }
+      }
+      END { exit (viol ? 1 : 0) }
+    ' $cs_files) || { echo "$secret_lint_out" >&2; echo "ERROR: un-attributed secret-looking field(s) — fix with [SecretValue] (reference/23-secrets.md) or a // secret-field-exception: comment." >&2; exit 1; }
+  fi
+fi
+echo "    secret-field check OK"
+
+# Agent-spec-decrypt gate (reference/23-secrets.md) — same heuristic spirit as the check above, but for a
+# different failure mode: a [AgentSecretValue] property whose backend ALSO does its own at-rest encryption
+# (calls .EncryptAsync( anywhere) needs a GetExpandedSpecForAgentAsync override that decrypts BEFORE the
+# host's generic [AgentSecretValue] redaction runs — otherwise the sibling shared/<subtype>.secrets.json
+# file a skill reads with jq ends up holding the same useless ciphertext Mongo has. This is not
+# hypothetical: it's the exact bug samples/secret-field shipped with before this check existed. The
+# first-party AWSRdsInstance/AWSRdsCluster/AWSElastiCache DevOps resources do NOT need this override —
+# confirmed they restore plaintext in OnPostCreateAsync/OnPostUpdateAsync specifically so the agent-spec
+# serializer already sees a decrypted entity; don't "fix" them to add one. This check can only confirm the
+# override EXISTS, not that it's implemented correctly (e.g. that it restores the ciphertext in a
+# `finally`), nor whether this resource's hooks even need one at all (see 23-secrets.md's two entity-hook
+# patterns) — see 23-secrets.md's verification checklist for the rest. A false positive (this resource
+# restores plaintext after every write instead, so the override would be redundant) is silenced the same
+# way as the check above:
+#   // agent-secret-spec-exception: <reason this resource doesn't need the override>
+#
+# NOTE for later: if the host's RedactAgentSpecSecrets is ever changed to auto-decrypt generically (using
+# the now-bridged IMongoEncryptionProvider), this override becomes optional rather than required — loosen
+# or retire this check at that point instead of forcing a now-redundant override on every extension.
+echo "==> Checking AgentSecretValue + at-rest encryption has a decrypting GetExpandedSpecForAgentAsync override (reference/23-secrets.md)"
+if [ -n "${cs_files:-}" ]; then
+  # `|| true`: under `set -o pipefail`, `grep -l ... | head -1` reports grep's own exit status (1) when
+  # nothing matches — the ordinary, expected case for most extensions (no AgentSecretValue at all). Without
+  # the guard, `set -e` kills the whole build right here, silently, before this check ever gets to decide
+  # whether anything is actually wrong.
+  has_agent_secret=$(grep -l '\[AgentSecretValue\]' $cs_files 2>/dev/null | head -1 || true)
+  has_own_encryption=$(grep -l '\.EncryptAsync(' $cs_files 2>/dev/null | head -1 || true)
+  if [ -n "$has_agent_secret" ] && [ -n "$has_own_encryption" ]; then
+    has_override=$(grep -l 'override.*GetExpandedSpecForAgentAsync\|agent-secret-spec-exception:' $cs_files 2>/dev/null | head -1 || true)
+    if [ -z "$has_override" ]; then
+      echo "  ✗ $has_agent_secret: [AgentSecretValue] + at-rest encryption (EncryptAsync in $has_own_encryption)," >&2
+      echo "    but no GetExpandedSpecForAgentAsync override found anywhere in the backend." >&2
+      echo "    The sibling shared/<subtype>.secrets.json file would contain ciphertext, not a usable value." >&2
+      echo "ERROR: see reference/23-secrets.md's 'agent-spec serializer override' section, or add a" >&2
+      echo "       // agent-secret-spec-exception: <reason> comment if this resource genuinely doesn't need it." >&2
+      exit 1
+    fi
+  fi
+fi
+echo "    agent-spec decrypt check OK"
 [ "$VALIDATE_ONLY" != 1 ] || exit 0
 
 # --- Which SDKs to build against. ----------------------------------------------------------------------------
@@ -277,6 +361,9 @@ validate_header_action_exposes "$MANIFEST" "$DIR/frontend/dist/remoteEntry.json"
 # with CS0579, so purge it up-front, after each version's use, and on exit via the trap. ArmDot obfuscation of the
 # extension's own assembly is on only when ARMDOT_LICENSE_FILE_PATH names a license. The import rides in through a
 # Directory.Build.targets dropped beside the csproj for this build, so the extension's own project file never changes.
+# The ArmDot build files themselves (props, targets, attributes and that template) are not in this repository: they
+# are read from DUPLO_ARMDOT_DIR, which DuploCloud's release action fills from the private shared repository, and
+# which a laptop build points at a checkout of it.
 BASELINE="$DIR/backend/_sdkbaseline"
 rm -rf "$BASELINE"
 OBFUSCATE=0
@@ -334,8 +421,18 @@ check_refs() {
   done < <(project_refs "$from")
 }
 if [ -n "${ARMDOT_LICENSE_FILE_PATH:-}" ]; then
-  ARMDOT_VERSION="$(sed -nE 's/.*<ArmDotEngineVersion>([^<]+)<.*/\1/p' build/ArmDot.Obfuscation.props)"
-  [ -n "$ARMDOT_VERSION" ] || { echo "ERROR: no ArmDotEngineVersion in build/ArmDot.Obfuscation.props" >&2; exit 1; }
+  # Already absolute and checked by builder_resolve_armdot_dir at the top, before the cd.
+  ARMDOT_DIR="${DUPLO_ARMDOT_DIR:-}"
+  for f in ArmDot.Obfuscation.props ArmDot.Obfuscation.targets ArmDotObfuscationAssemblyInfo.cs Directory.Build.targets.template; do
+    [ -n "$ARMDOT_DIR" ] && [ -f "$ARMDOT_DIR/$f" ] && continue
+    echo "ERROR: ARMDOT_LICENSE_FILE_PATH is set, but DUPLO_ARMDOT_DIR does not name a directory holding the ArmDot build files" >&2
+    echo "       (DUPLO_ARMDOT_DIR=${ARMDOT_DIR:-unset}, missing $f). They live under armdot/ in duplocloud-internal/.github:" >&2
+    echo "       DuploCloud's release action fetches them, and a laptop build points DUPLO_ARMDOT_DIR at a checkout of them." >&2
+    exit 1
+  done
+  ARMDOT_DIR="$(cd "$ARMDOT_DIR" && pwd -P)"
+  ARMDOT_VERSION="$(sed -nE 's/.*<ArmDotEngineVersion>([^<]+)<.*/\1/p' "$ARMDOT_DIR/ArmDot.Obfuscation.props")"
+  [ -n "$ARMDOT_VERSION" ] || { echo "ERROR: no ArmDotEngineVersion in $ARMDOT_DIR/ArmDot.Obfuscation.props" >&2; exit 1; }
   # Only a project that imports the targets file dropped below is obfuscated, so a referenced project outside backend/,
   # or one whose own Directory.Build.targets shadows the dropped file, publishes plain into a bundle whose manifest
   # says obfuscated. Refuse that rather than overclaim. Every reference reachable from the entry project is checked.
@@ -352,17 +449,17 @@ if [ -n "${ARMDOT_LICENSE_FILE_PATH:-}" ]; then
     echo "  build without obfuscation." >&2
     exit 1
   fi
-  # A file identical to the template is this script's own leftover from a killed build, so it is replaced.
-  # Anything else is the extension's own and is never overwritten.
-  if [ -e "$OBF_TARGETS" ] && ! cmp -s build/Directory.Build.targets.template "$OBF_TARGETS"; then
+  # A file identical to the template is this script's own leftover from a killed build, so it is replaced. Anything
+  # else is the extension's own and is never overwritten.
+  if [ -e "$OBF_TARGETS" ] && ! cmp -s "$ARMDOT_DIR/Directory.Build.targets.template" "$OBF_TARGETS"; then
     echo "ERROR: $OBF_TARGETS already exists. The obfuscation import is dropped there for the build," >&2
     echo "       so move the extension's own targets into its csproj first." >&2
     exit 1
   fi
   trap 'rm -rf "$BASELINE" 2>/dev/null || true; rm -f "$OBF_TARGETS"' EXIT
-  cp build/Directory.Build.targets.template "$OBF_TARGETS"
+  cp "$ARMDOT_DIR/Directory.Build.targets.template" "$OBF_TARGETS"
   OBFUSCATE=1
-  OBFUSCATE_PROPS=(-p:DuploObfuscate=true -p:ArmDotLicenseFile="$ARMDOT_LICENSE_FILE_PATH" -p:DuploDevkitBuildDir="$PWD/build/")
+  OBFUSCATE_PROPS=(-p:DuploObfuscate=true -p:ArmDotLicenseFile="$ARMDOT_LICENSE_FILE_PATH" -p:DuploDevkitBuildDir="$ARMDOT_DIR/")
 fi
 
 # build_one <sdk-version> <sdk-digest> <out-dir>: publish the backend against one SDK version (obfuscated when a

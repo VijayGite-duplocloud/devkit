@@ -75,7 +75,7 @@ extension directory — do it now so your Hack Day work has somewhere to live.
 > Mistyped the address? Re-run with the right one: `./run.sh --email you@yourcompany.com`. The stale
 > request is discarded and your trial is still intact.
 
-The remaining prompts: `Admin password:` (stored in the database — editing `.env` later won't change it),
+The remaining prompts: `Admin password:` and `Confirm Admin password:` (stored in the database — editing `.env` later won't change it),
 and `Select LLM provider:` (`1` anthropic, `2` bedrock) and its key.
 
 **4. Sign in.** `./run.sh` prints `✔ Platform ready` when the stack is up. Go to
