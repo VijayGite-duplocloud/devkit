@@ -85,6 +85,31 @@ bundle built against a newer SDK than the host's, or a different major version, 
 matching `sdk-bundle`: the installer hands a host only a bundle whose SDK version matches, whatever the loader
 would accept.
 
+## Building for more than one SDK version (package feed, no host)
+
+The exactness rule means an extension meant for hosts at different SDK versions ships one bundle per version.
+`scripts/build-extension.sh` does that from the package feed when `DUPLO_SDK_VERSIONS` names the versions,
+comma-separated or one per line:
+
+```bash
+DUPLO_SDK_VERSIONS=1.0.6,1.0.7 ./scripts/build-extension.sh extensions/<name>
+```
+
+- Each version is restored as `Duplocloud.AiHelpdesk.Sdk` at exactly that version through the `nuget.org`
+  source in `backend/nuget.config` (a feed build puts nothing in the local `./sdk-packages` source), so it must
+  be a version the feed publishes. No `sdk-version` or `sdk-bundle` call is made, and no `.env`, `DUPLO_HOST` or
+  `DUPLO_TOKEN` is needed to build.
+- The frontend is built once; the backend is published once per version, with `-p:DuploSdkVersion=<v>`, and
+  obfuscated when `ARMDOT_LICENSE_FILE_PATH` is set, as in a host build.
+- Output is `dist/sdk-<v>/extension.zip` per version, each stamped `sdkVersion: <v>` and no `sdkDigest` (there
+  is no host bundle to fingerprint). `dist/extension.zip` is not written, and a bundle for a version no longer
+  listed is removed by the next build. Unset, the variable keeps the single host build at `dist/extension.zip`.
+- The host credentials are for deploying only. `scripts/deploy-all.sh` reads the host's `sdk-version` and loads
+  the one bundle stamped with it, failing when none matches; `scripts/deploy-extension.sh <zip>` loads the bundle
+  you name, which the host rejects unless its `sdkVersion` is the host's.
+- In CI, `.github/workflows/extension-ci.yml` and `release.yml` take the same list from the repository variable
+  `DUPLO_SDK_VERSIONS`; the release action then cuts one release per bundle, tagged with its `sdkVersion`.
+
 ## Reloading changed code — bump `manifest.version`
 
 Bump `manifest.version` on **every backend code change** before re-loading. A `load-bundle` of the **same**
