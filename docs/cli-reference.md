@@ -68,12 +68,14 @@ On an EC2 host the provider prompt first probes whether the instance role can ac
    license server emails the address a link, and the run polls for up to 2 minutes after it is clicked.
 6. Resolves password and LLM provider: flag, then `.env`, then prompt. A prompted password is asked
    twice and must match (and be non-empty); a `--password` flag or `.env` value is used as-is.
-7. Generates `Encryption__MasterKey`, `Authentication__JwtSharedSecret`, `MONGO_ROOT_PASSWORD` and `Agent__ApiAuthToken`
-   once, if unset.
-   A run that would generate the mongo password over a data volume initialised before the key existed stops
-   instead, since the database would not know the new password: `--reset` recreates the database, or
-   `MONGO_ROOT_PASSWORD=authpass` in `.env` keeps it.
-8. `docker compose pull`, then `docker compose up -d`.
+7. Generates `Encryption__MasterKey`, `Authentication__JwtSharedSecret` and `Agent__ApiAuthToken` once, if unset.
+8. `docker compose pull`, then settles `MONGO_ROOT_PASSWORD`, generated once if unset. A data volume initialised
+   before the mongo key existed still answers to the old fixed password, so the run starts mongo alone, waits for it to
+   answer, changes the root password to the generated value, and writes it to `.env` only once the database has taken
+   it. A run that stops between the two steps finishes the rotation next time with the same value. A database that
+   answers to neither password stops the run and names `--reset`. This sits after the pull and every prompt so a
+   studio still running from before the upgrade keeps a working password until the next step recreates it.
+   Then `docker compose up -d`.
 9. Waits up to ~4.5 minutes for the studio to answer on `/healthz` — an anonymous route, because this
    happens before the admin token exists.
 10. Mints a permanent admin API token into `DUPLO_ADMIN_TOKEN`, revoking its own prior `dev-kit-admin`
@@ -168,7 +170,7 @@ Your `extensions/` directory is **never** touched by any of these — it is only
 | `build-extension.sh <extension-dir>` | Validate naming, fetch the host SDK, `dotnet publish`, `npm build`, and zip to `<dir>/dist/extension.zip`. With `DUPLO_SDK_VERSIONS` set to a list of versions, one per line, it restores each of those SDK versions from the package feed instead, with no host, and writes one `<dir>/dist/sdk-<v>/extension.zip` per version. |
 | `build-all.sh` | Build every `extensions/<name>/manifest.json` in the repo. What CI runs. |
 | `deploy-extension.sh <path-to-extension.zip>` | Hot-load one bundle onto the platform — no restart. |
-| `deploy-all.sh` | Hot-load every built bundle. Run after `build-all.sh`. |
+| `deploy-all.sh` | Hot-load every built bundle. Run after `build-all.sh`. For an extension built with `DUPLO_SDK_VERSIONS`, it reads the host's SDK version and loads the one `dist/sdk-<v>/extension.zip` stamped with it, since the host loads only a bundle whose `sdkVersion` equals its own, and fails the run when no built version matches. |
 | `remove-extension.sh <extension-id>` | Unload and delete a loaded extension by its manifest id, e.g. `com.duplocloud.helloworld`. |
 
 `build-extension.sh` refuses to build an extension whose naming is wrong — REST segments must start with
@@ -206,7 +208,7 @@ dev-kit URL used by upgrades. Both are sourced, not run.
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
 | `.github/workflows/extension-ci.yml` | push | Builds `extensions/`. Can hot-load on a manual run. |
-| `.github/workflows/release.yml` | push to `main`, or manual | Releases every extension through `duplocloud/actions/release-extension`: builds each one, cuts a GitHub Release per build tagged `<name>-v<version>-sdk-<sdkVersion>`, uploads it and registers it with the console as an unpublished version. Bumping `manifest.version` is how you release a new version. It does not hot-load. |
+| `.github/workflows/release.yml` | push to `main`, `dev` or `rc`, or manual | Releases every extension through `duplocloud/actions/release-extension`: builds each one, cuts a GitHub Release per build tagged `<name>-v<version>-sdk-<sdkVersion>`, uploads it and registers it with the console as an unpublished version. `main` releases to the prod console; `dev` and `rc` release to the dev console under a channel tag (`<name>-dev-v…`). Bumping `manifest.version` is how you release a new version. It does not hot-load. |
 
 Both need repo secrets `DUPLO_HOST` and `DUPLO_TOKEN`. By default the build fetches the host SDK feed from
 `DUPLO_HOST`, so it must be reachable from CI — a real platform, not `localhost`. With the repository variable

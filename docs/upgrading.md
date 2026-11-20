@@ -128,3 +128,7 @@ image ships the .NET 10 SDK, which builds both; a `--native` build needs .NET SD
 
 3. If a build fails right after an upgrade, start with
    [the host-SDK entry in troubleshooting](troubleshooting.md#the-extension-build-cannot-reach-the-host-sdk).
+4. If the upgrade replaced a `release.yml` that used `.github/extension-publishers.json`, the release flow has
+   changed underneath you. Follow
+   [Moving an existing repository onto this flow](releasing-extensions.md#moving-an-existing-repository-onto-this-flow)
+   before the next push to `main`.

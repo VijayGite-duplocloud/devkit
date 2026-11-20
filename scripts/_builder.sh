@@ -250,7 +250,7 @@ builder_keep_local_copy() { # builder_keep_local_copy <pull-error-text>
 # which would let two builds of one version differ. The digest is the multi-arch index, so it resolves on amd64
 # and arm64 alike. .github/workflows/builder-image.yml prints the new digest after each publish. Moving this pin
 # (and docker-compose.yml's matching default) is a reviewed change, since it changes what every extension builds with.
-_BUILDER_PINNED_IMAGE="quay.io/duplocloud/duplo-extension-builder@sha256:8185e6a74379ae99e145f55608b3bc17e3037e95e64a612a226fe0eb15c0dbcd"
+_BUILDER_PINNED_IMAGE="quay.io/duplocloud/duplo-extension-builder@sha256:c53105d199f6f9c1106a48becc8fb031124b34cc74069eee4ed8ff06d28b5dc0"
 
 builder_resolve_image() {
   # The raw value is kept for the error message: BUILDER_PULL may have come from .env rather than the
