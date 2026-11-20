@@ -1270,11 +1270,14 @@ fi
 WS="$(getenv EXTENSION_DEV_WORKSPACE_ID)"
 ws_exists() { [ -n "$1" ] && curl -fsS -o /dev/null --max-time 6 "$API/v1/aiservicedesk/admin/data/workspaces/$1" -H "Authorization: Bearer $TOK" 2>/dev/null; }
 if ! ws_exists "$WS"; then
-  # find existing by name, else create
+  # Find existing by name, else create. Checks the pre-rename 'extension-dev' name too, so a stack set up
+  # before the agent-dev rename reuses its workspace instead of getting a second one alongside it.
   WS="$(curl -fsS --max-time 8 "$API/v1/aiservicedesk/admin/data/workspaces" -H "Authorization: Bearer $TOK" 2>/dev/null \
       | python3 -c 'import sys,json
 d=json.load(sys.stdin); items=d.get("data",{}); items=items.get("items",items) if isinstance(items,dict) else items
-print(next((w["id"] for w in (items or []) if w.get("name")=="agent-dev"), ""))' 2>/dev/null || true)"
+items=items or []
+print(next((w["id"] for w in items if w.get("name")=="agent-dev"),
+      next((w["id"] for w in items if w.get("name")=="extension-dev"), "")))' 2>/dev/null || true)"
   if [ -z "$WS" ]; then
     echo "==> Creating 'agent-dev' workspace…"
     # Everything after this needs the workspace, so a refused create (most often an expired license —
@@ -1302,6 +1305,8 @@ print(next((x["id"] for x in (items or []) if x.get("name")==os.environ["N"]), "
 PS="$(getenv EXTENSION_DEV_PERMSET_ID)"
 if ! data_exists "$PS" permissionset; then
   PS="$(data_id_by_name permissionset agent-dev-access)"
+  # Pre-rename fallback: reuse a stack's existing 'extension-dev-access' instead of creating a second one.
+  [ -z "$PS" ] && PS="$(data_id_by_name permissionset extension-dev-access)"
   if [ -z "$PS" ]; then
     echo "==> Creating 'agent-dev-access' permission set…"
     PS="$(studio_create_id "$API/v1/aiservicedesk/admin/data/permissionset" \
@@ -1313,6 +1318,8 @@ fi
 PSG="$(getenv EXTENSION_DEV_PERMSETGROUP_ID)"
 if ! data_exists "$PSG" permissionsetgroup; then
   PSG="$(data_id_by_name permissionsetgroup agent-dev-group)"
+  # Pre-rename fallback: reuse a stack's existing 'extension-dev-group' instead of creating a second one.
+  [ -z "$PSG" ] && PSG="$(data_id_by_name permissionsetgroup extension-dev-group)"
   if [ -z "$PSG" ]; then
     echo "==> Assigning $EMAIL to the permission set…"
     PSG="$(studio_create_id "$API/v1/aiservicedesk/admin/data/permissionsetgroup" \
