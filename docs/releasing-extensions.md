@@ -192,7 +192,7 @@ organization variables:
 | `CONSOLE_SIGNING_CERT` | Organization variable | The publisher's certificate. The same value for every repository |
 | `EXTENSION_PUBLISHER_ROLE_ARN` | Organization variable | The AWS role the workflow assumes, by name, to write to the channels bucket |
 | `ARMDOT_LICENSE_KEY` | Organization secret | Base64 of DuploCloud's ArmDot license file. The reusable release action decodes it to the file `build-extension.sh` reads, so every build it runs obfuscates |
-| `RELEASE_BOT_GITHUB_TOKEN` | Organization secret, granted per repository | A GitHub token that reads the private `duplocloud-internal/.github`, where the ArmDot build files live. The release action fetches them with it before the build |
+| `RELEASE_BOT_GITHUB_TOKEN` in `duplocloud-internal`, `RELEASE_BOT_GITHUB_TOKEN_INTERNAL` in `duplocloud` | Organization secret, granted per repository | A GitHub token that reads the private `duplocloud-internal/.github`, where the ArmDot build files live. Each organization's token reaches that organization alone, so a repository in `duplocloud` reads the internal token from its own second secret. The release action fetches them with it before the build |
 | `CONSOLE_DEV_API_KEY` | Secret, granted per repository | The dev console's API key, used on `dev` and `rc` in place of `CONSOLE_API_KEY` |
 | `CONSOLE_DEV_SIGNING_KEY` | Secret, granted per repository | The dev console publisher's private key PEM, used on `dev` and `rc` |
 | `CONSOLE_DEV_SIGNING_CERT` | Organization variable | The dev console publisher's certificate |
