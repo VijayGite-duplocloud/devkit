@@ -1408,9 +1408,12 @@ DEVKIT_EXTENSIONS=(
 )
 EXT_LINE=""
 echo "==> Installing default extensions…"
-if ./scripts/install-extensions.sh "${DEVKIT_EXTENSIONS[@]}"; then
+# Checked first: bash 3.2 (macOS) under set -u aborts on "${DEVKIT_EXTENSIONS[@]}" when the list is empty.
+if [ ${#DEVKIT_EXTENSIONS[@]} -eq 0 ]; then
+  echo "    (DEVKIT_EXTENSIONS is empty — nothing to install)"
+elif ./scripts/install-extensions.sh "${DEVKIT_EXTENSIONS[@]}"; then
   EXT_LINE="
-  Extension ${DEVKIT_EXTENSIONS[*]} → installed or skipped (see output above)"
+  Extension ${DEVKIT_EXTENSIONS[*]} → see the install output above"
 else
   echo "    (extension install incomplete — re-run ./scripts/install-extensions.sh ${DEVKIT_EXTENSIONS[*]})"
 fi

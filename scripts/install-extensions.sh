@@ -1,21 +1,27 @@
 #!/usr/bin/env bash
-# Install extensions from the studio's extension registry by id, at the newest version the catalog offers.
+# Install extensions from the studio's extension registry by manifest id (e.g. com.duplocloud.demo-cloud-deployment).
 #
 # WHY: a fresh dev kit should come up with the agents people start from (DUPLOAI-4813: the Cloud Deployment
 # Agent first) already installed, rather than leaving every developer to find them in the registry by hand.
 # run.sh calls this with its DEVKIT_EXTENSIONS list; it also works on its own, against a local or remote target.
 #
-# For each id: look it up in the registry catalog (read once). An id the catalog doesn't list, or lists with no
-# versions, is skipped — not an error. Otherwise pick the semver-highest stable version (the highest
-# pre-release only when there is no stable one), or exactly the version given as id@version.
-# Then ask /extensions/{id}/versions what is installed: if that version is already current, do nothing;
-# else POST the install with pin:false, so the extension still follows later registry updates.
+# The registry catalog is read once. Its rows are matched on manifestId (falling back to id): a row's `id` is the
+# console's renameable display slug, while the installer — and this script's arguments — use the manifest id.
+# Per id, in order:
+#   - not in the catalog, not licensed for this install, or no version to install → skipped (not an error)
+#   - pinned by an admin (a pin, or a rollback, which always pins) → left alone: an unpinned install would clear it
+#   - an install request the installer is still working on → left alone, not requested twice
+#   - the version: the one the installer's mark offers (without a pin the installer accepts no other), else, with
+#     no mark, the semver-highest stable catalog version. id@version must match the offered build.
+#   - already current per /extensions/{id}/versions → nothing to do; otherwise POST the install with pin:false.
+# The installer answers 202 when it takes the request and finishes in the background, so that is reported as
+# "install requested", not as installed.
 #
-# Idempotent: re-running installs nothing that is already current. Every failure prints the server's own reason
-# and the remaining ids are still processed.
+# Idempotent: re-running installs nothing that is current, pinned or in progress. Every failure prints the server's
+# own reason and the remaining ids are still processed.
 #
 # Usage: ./scripts/install-extensions.sh <extension-id>[@<version>] [...]
-# Exit:  0 every id installed, already current or skipped as not in the catalog
+# Exit:  0 every id installed, requested, already current, or skipped
 #        1 at least one id failed, no token, or the catalog could not be read
 #        2 usage
 set -euo pipefail
@@ -37,7 +43,7 @@ api() {
 status_of() { printf '%s' "${1##*$'\n'}"; }   # last line of an api() reply
 body_of()   { printf '%s' "${1%$'\n'*}"; }    # everything before it
 
-# err_msg BODY → the studio's reason: message + errors + " (code)" for a JSON body, else the raw text.
+# err_msg BODY → the server's reason: message + errors, tagged with its code or reason slug; else the raw text.
 err_msg() {
   printf '%s' "$1" | python3 -c '
 import sys, json
@@ -49,7 +55,8 @@ if isinstance(d, dict):
     errs = d.get("errors")
     if isinstance(errs, (list, dict)): errs = json.dumps(errs)
     msg = " ".join(str(x) for x in (d.get("message"), errs) if x)
-    if d.get("code"): msg += " (%s)" % d["code"]
+    tag = d.get("code") or d.get("reason")
+    if tag: msg = "%s (%s)" % (msg, tag) if msg else str(tag)
 print(msg or raw.strip() or "<empty body>")'
 }
 
@@ -68,18 +75,33 @@ done
 [ ${#IDS[@]} -gt 0 ] || exit 1
 
 # ── the registry catalog, read once ─────────────────────────────────────────────────────────────
+# A license problem still answers 200, with libraryState saying which and no extensions: that must read as an
+# error, never as "every id is missing".
 REPLY_="$(api GET "$ADMIN/extension-registry/catalog")"
 CODE="$(status_of "$REPLY_")"; CATALOG="$(body_of "$REPLY_")"
-if [[ "$CODE" != 2* ]] || ! printf '%s' "$CATALOG" | python3 -c '
+STATE="bad"
+[[ "$CODE" != 2* ]] || STATE="$(printf '%s' "$CATALOG" | python3 -c '
 import sys, json
-d = json.load(sys.stdin)
-raise SystemExit(0 if isinstance(d, dict) and isinstance(d.get("extensions"), list) else 1)' 2>/dev/null; then
-  echo "    ✗ could not read the extension catalog: HTTP $CODE: $(err_msg "$CATALOG")" >&2
-  exit 1
-fi
+try: d = json.load(sys.stdin)
+except Exception: d = None
+if not isinstance(d, dict) or not isinstance(d.get("extensions"), list): print("bad")
+else: print(d.get("libraryState") or "ok")' 2>/dev/null)" || STATE="bad"
+case "$STATE" in
+  ok) ;;
+  bad) echo "    ✗ could not read the extension catalog: HTTP $CODE: $(err_msg "$CATALOG")" >&2; exit 1 ;;
+  *)
+    case "$STATE" in
+      missing)     why="no license is configured" ;;
+      invalid)     why="the license server refused this install's license" ;;
+      unavailable) why="the license server could not be reached" ;;
+      *)           why="see the Extension Library page" ;;
+    esac
+    echo "    ✗ could not read the extension catalog: library state \"$STATE\" ($why)" >&2; exit 1 ;;
+esac
 
-# pick_version ID WANT → "ok <version>" | "missing" | "absent <v1, v2, …>" (highest first), from $CATALOG.
-pick_version() {
+# plan_install ID WANT → one line from $CATALOG: "ok <version>" | "missing" | "unlicensed" | "noversion" |
+# "pinned <version>" | "busy <state>" | "blocked <reason>" | "notoffered <version>" | "absent <v1, v2, …>".
+plan_install() {
   printf '%s' "$CATALOG" | ID="$1" WANT="$2" python3 -c '
 import sys, json, os
 def key(v):  # semver-ish: numeric core, stable above its pre-releases, pre-release parts compared numerically
@@ -87,12 +109,22 @@ def key(v):  # semver-ish: numeric core, stable above its pre-releases, pre-rele
     nums = tuple(int(p) if p.isdigit() else 0 for p in core.split("."))
     pre_key = tuple((0, int(p), "") if p.isdigit() else (1, 0, p) for p in pre.split(".")) if pre else ()
     return (nums, 0 if pre else 1, pre_key)
-ext = next((e for e in json.load(sys.stdin)["extensions"] if isinstance(e, dict) and e.get("id") == os.environ["ID"]), None)
+def rows(name): return [r for r in c.get(name) or [] if isinstance(r, dict)]
+c = json.load(sys.stdin); id_, want = os.environ["ID"], os.environ["WANT"]
+ext = next((e for e in rows("extensions") if (e.get("manifestId") or e.get("id")) == id_), None)
+mark = next((m for m in rows("marks") if m.get("id") == id_), None) or {}
+busy = next((r for r in rows("requests") if r.get("id") == id_ and r.get("state") not in ("done", "backed-out", "failed")), None)
 vs = [v["version"] for v in (ext or {}).get("versions") or [] if isinstance(v, dict) and v.get("version")]
-want = os.environ["WANT"]
-if not vs: print("missing")
-elif want: print("ok " + want if want in vs else "absent " + ", ".join(sorted(vs, key=key, reverse=True)))
-else: print("ok " + max([v for v in vs if "-" not in v] or vs, key=key))'
+if ext is None: out = "missing"
+elif ext.get("licensed") is False: out = "unlicensed"
+elif mark.get("pinnedVersion"): out = "pinned " + mark["pinnedVersion"]
+elif busy: out = "busy " + (busy.get("state") or "pending")
+elif mark.get("version"): out = ("ok " if want in ("", mark["version"]) else "notoffered ") + mark["version"]
+elif mark.get("reason"): out = "blocked " + mark["reason"]
+elif not vs: out = "noversion"
+elif want: out = "ok " + want if want in vs else "absent " + ", ".join(sorted(vs, key=key, reverse=True))
+else: out = "ok " + max([v for v in vs if "-" not in v] or vs, key=key)
+print(out)'
 }
 
 # is_current BODY VERSION → rc 0 when the /versions reply marks VERSION as the current one.
@@ -105,15 +137,22 @@ cur = any(isinstance(e, dict) and e.get("isCurrent") and e.get("version") == os.
 raise SystemExit(0 if cur else 1)'
 }
 
-# ── per id: pick the version, skip it if current, else install ──────────────────────────────────
+# ── per id: decide, skip if current, else install ───────────────────────────────────────────────
 for i in "${!IDS[@]}"; do
   id="${IDS[$i]}"; want="${WANTS[$i]}"
-  pick="$(pick_version "$id" "$want")" || pick=""
+  pick="$(plan_install "$id" "$want")" || pick=""
   case "$pick" in
-    "ok "?*) ver="${pick#ok }" ;;
-    missing) echo "    ↷ $id — not in the extension catalog, skipped"; continue ;;
-    absent*) echo "    ✗ $id@$want — version not in the catalog (available: ${pick#absent })" >&2; FAILED=1; continue ;;
-    *)       echo "    ✗ $id — could not read its catalog entry" >&2; FAILED=1; continue ;;
+    "ok "?*)       ver="${pick#ok }" ;;
+    missing)       echo "    ↷ $id — not in the extension catalog, skipped"; continue ;;
+    unlicensed)    echo "    ↷ $id — not licensed for this install, skipped"; continue ;;
+    noversion)     echo "    ↷ $id — no version to install, skipped"; continue ;;
+    "pinned "*)    echo "    ↷ $id — pinned at ${pick#pinned }, left alone"; continue ;;
+    "busy "*)      echo "    ↷ $id — an install is already in progress (${pick#busy })"; continue ;;
+    "blocked "*)   echo "    ✗ $id — the installer can't install it here: ${pick#blocked }" >&2; FAILED=1; continue ;;
+    "notoffered "*) echo "    ✗ $id@$want — the registry offers ${pick#notoffered }; installing another version needs a pin" >&2
+                   FAILED=1; continue ;;
+    "absent "*)    echo "    ✗ $id@$want — version not in the catalog (available: ${pick#absent })" >&2; FAILED=1; continue ;;
+    *)             echo "    ✗ $id — could not read its catalog entry" >&2; FAILED=1; continue ;;
   esac
 
   REPLY_="$(api GET "$ADMIN/extensions/$id/versions")"; CODE="$(status_of "$REPLY_")"; BODY="$(body_of "$REPLY_")"
@@ -125,10 +164,10 @@ for i in "${!IDS[@]}"; do
 
   REQ="$(ID="$id" V="$ver" python3 -c 'import json,os;print(json.dumps({"extensionId":os.environ["ID"],"version":os.environ["V"],"pin":False}))')"
   REPLY_="$(api POST "$ADMIN/extension-registry/install" "$REQ")"; CODE="$(status_of "$REPLY_")"
-  if [[ "$CODE" == 2* ]]; then
-    echo "    ✔ $id $ver — installed"
-  else
-    echo "    ✗ $id $ver — install failed: HTTP $CODE: $(err_msg "$(body_of "$REPLY_")")" >&2; FAILED=1
-  fi
+  case "$CODE" in
+    202) echo "    ✔ $id $ver — install requested (HTTP 202); the installer finishes it in the background" ;;
+    2*)  echo "    ✔ $id $ver — installed" ;;
+    *)   echo "    ✗ $id $ver — install failed: HTTP $CODE: $(err_msg "$(body_of "$REPLY_")")" >&2; FAILED=1 ;;
+  esac
 done
 exit "$FAILED"

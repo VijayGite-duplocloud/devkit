@@ -24,9 +24,16 @@ if [ "${#DEVKIT_EXTENSIONS[@]}" -gt 0 ] && [ "$okids" = 1 ] \
    && printf '%s\n' "${DEVKIT_EXTENSIONS[@]}" | grep -qx 'com.duplocloud.demo-cloud-deployment'; then ok
 else bad "DEVKIT_EXTENSIONS=(${DEVKIT_EXTENSIONS[*]})"; fi
 
-t "call_is_non_fatal: the install runs as an if-condition, so set -e can't stop run.sh"
-call="$(grep -n '^if ./scripts/install-extensions.sh "${DEVKIT_EXTENSIONS\[@\]}"; then' run.sh | head -1 | cut -d: -f1)"
+t "call_is_non_fatal: the install runs as an if/elif-condition, so set -e can't stop run.sh"
+call="$(grep -nE '^(if|elif) \./scripts/install-extensions\.sh "\$\{DEVKIT_EXTENSIONS\[@\]\}"; then' run.sh | head -1 | cut -d: -f1)"
 if [ -n "$call" ]; then ok; else bad "no non-fatal call line"; fi
+
+# bash 3.2 (macOS) under set -u calls "${arr[@]}" on an empty array an unbound variable and aborts run.sh, so an
+# emptied list must be caught before the array is expanded.
+t "empty_list_guarded: an emptied DEVKIT_EXTENSIONS is checked before it is expanded"
+guard="$(grep -n '^if \[ \${#DEVKIT_EXTENSIONS\[@\]} -eq 0 \]; then' run.sh | head -1 | cut -d: -f1)"
+if [ -n "$guard" ] && [ -n "$call" ] && [ "$guard" -lt "$call" ] && [ $((call - guard)) -le 3 ]; then ok
+else bad "guard=$guard call=$call"; fi
 
 t "placed_after_kb_before_portal: after register-qdrant.sh, before portal_url()"
 kb="$(grep -n '\./scripts/register-qdrant\.sh "\$WS"' run.sh | head -1 | cut -d: -f1)"
