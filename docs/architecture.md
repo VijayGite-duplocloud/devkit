@@ -112,5 +112,6 @@ and the workspace itself. Without them, login lands on `/app/auth/no-tenant-acce
 
 `run.sh` also installs a default set of extensions from the extension registry, listed in its
 `DEVKIT_EXTENSIONS` array (today the Cloud Deployment Agent, `com.duplocloud.demo-cloud-deployment`).
-`scripts/install-extensions.sh` does the work: it skips ids the registry catalog doesn't list, leaves a version
-that is already current alone, and installs with `pin: false`. Run it by hand with any `id` or `id@version`.
+`scripts/install-extensions.sh` does the work: it skips ids the registry catalog doesn't list (matched on the
+manifest id), leaves an extension that is already current, pinned or mid-install alone, and otherwise installs the
+build the installer offers with `pin: false`. Run it by hand with any manifest id.

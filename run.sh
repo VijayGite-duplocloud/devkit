@@ -1399,9 +1399,9 @@ esac
 
 # ── install the dev-kit's default extensions (idempotent, never fatal) ─────────
 # DUPLOAI-4813: a fresh dev kit comes up with the agents people start from already installed from the extension
-# registry. This list is the one place to add more. An entry is an id (the newest stable version the catalog
-# offers) or id@version (exactly that one). Installs use pin:false, so they keep following registry updates.
-# An id the catalog doesn't list is skipped, and a version that is already current is left alone. Non-fatal, like
+# registry. This list is the one place to add more. An entry is a manifest id, installed at the build the registry
+# offers (id@version must name that same build). Installs use pin:false, so they keep following registry updates.
+# An id the catalog doesn't list is skipped; one already current, pinned or being installed is left alone. Non-fatal, like
 # the KB step above: an extension that failed to install must never stop the platform coming up.
 DEVKIT_EXTENSIONS=(
   com.duplocloud.demo-cloud-deployment   # Cloud Deployment Agent
