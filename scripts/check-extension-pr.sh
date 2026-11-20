@@ -8,7 +8,8 @@
 #   - manifest.version is unchanged, so the release job will refuse to publish the new content at the old version.
 #   - a directory under skills/ has no matching skills[].folder in the manifest, so the host never registers it.
 #   - the built bundle's frontend is webpack (fe/remoteEntry.js, no fe/remoteEntry.json), whose pages do not open on
-#     hosts that load Native Federation remotes. Checked only when dist/agent.zip exists, i.e. after a build.
+#     hosts that load Native Federation remotes. Checked only after a build, on dist/agent.zip and on each
+#     dist/sdk-*/agent.zip of a multi-version build.
 #   - the manifest id or version cannot form a bucket key, which the release action refuses.
 #   - the manifest declares no resources, which the host refuses to install.
 #   - the frontend depends on ng-common-lib older than 0.5.1: light-only below 0.5.0, and without the token defaults
@@ -59,7 +60,8 @@ for m in extensions/*/manifest.json extension/*/manifest.json extension/manifest
       || warn "$m" "$dir ships skills/$s but the manifest declares no skills[].folder for it, so the host never registers it."
   done
 
-  lib="$(jq -r '.dependencies["@duplocloud-internal/ng-common-lib"] // empty' "$dir/frontend/package.json" 2>/dev/null || true)"
+  # devDependencies as well: refresh-common-lib.sh follows that list too, and some extensions keep the lib there.
+  lib="$(jq -r '(.devDependencies + .dependencies)["@duplocloud-internal/ng-common-lib"] // empty' "$dir/frontend/package.json" 2>/dev/null || true)"
   lib_version="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' <<<"$lib" | head -1 || true)"
   if [ -n "$lib_version" ] && [ "$(printf '%s\n' "$lib_version" 0.5.1 | sort -V | head -1)" != 0.5.1 ]; then
     if [ "$(printf '%s\n' "$lib_version" 0.5.0 | sort -V | head -1)" != 0.5.0 ]; then

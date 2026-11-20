@@ -1,6 +1,7 @@
 # Releasing agents
 
-`.github/workflows/release.yml` runs on every push to `main` and on a manual dispatch. It calls
+`.github/workflows/release.yml` runs on every push to `main`, in DuploCloud's organizations on every push to `dev`
+and `rc` as well, and on a manual dispatch. It calls
 [duplocloud/actions/release-extension](https://github.com/duplocloud/actions/tree/main/release-extension), which
 builds every `extensions/*/manifest.json`, plus the single-extension layouts `extension/manifest.json` and
 `extension/*/manifest.json`, with `scripts/build-all.sh`, then signs each bundle, publishes one GitHub Release
@@ -8,14 +9,17 @@ per build, uploads it and registers it with the console in one run. The action's
 the rules it enforces. This page covers what that run does, in any organization, and the extra steps that
 apply only inside DuploCloud's own organizations, `duplocloud` and `duplocloud-internal`.
 
-Only one release run executes for a repository at a time. A run that starts while another is still in
-flight queues behind it rather than overlapping or being canceled mid-write.
+Only one release run executes per side of a repository at a time, one for `main` and one for `dev` and `rc`
+together. A run that starts while another on its side is still in flight queues behind it rather than
+overlapping or being canceled mid-write; a `main` run and a `dev` run can overlap, since they share no console,
+bucket or tag.
 
 ## What a release produces
 
 A build is tagged `<slug>-v<version>-sdk-<sdkVersion>`, where `<slug>` is the agent directory's name
 and `<sdkVersion>` comes from the built bundle's own `manifest.json` (stamped by `build-extension.sh` from
-the host SDK it built against). The release is cut at the built commit with `agent.zip` attached. A
+the SDK it built against: the host's, or each version in `DUPLO_SDK_VERSIONS`, which makes one bundle and one
+release per version). The release is cut at the built commit with `agent.zip` attached. A
 version already released, under this tag shape or the older `<slug>-v<version>` one, is skipped if the
 agent is unchanged since, and fails the run if it changed, since bumping `manifest.version` is the only
 way to tell two different bundles apart.
@@ -32,11 +36,40 @@ In every organization the build is uploaded and registered with the console as a
 of the record whose manifest id equals the bundle's. A version stays unpublished, for a platform owner to
 publish once the build has been verified, unless the run was dispatched with `publish` (see "Publishing on
 register"). In `duplocloud` and `duplocloud-internal` the release also carries `agent.zip.sig`, the
-bundle is obfuscated, and the upload goes to the channels bucket through the publisher role. Elsewhere the
+bundle is obfuscated, and a `main` release's upload goes to the channels bucket through the publisher role
+(a `dev` or `rc` release goes through the dev console instead, see the next section). Elsewhere the
 bundle is plain, signed only when the repository supplies its own key and certificate, and the upload goes
 through a URL the console issues for the console key, so a customer's repository needs nothing from
 DuploCloud beyond that key.
 
+## Releasing from dev and RC
+
+A push to `main` releases to the prod console and the prod bucket. In DuploCloud's organizations a push to `dev` or
+`rc` releases the same way to the non-prod side: the dev console at `https://dev-console.prod-apps.duplocloud.net`
+and the non-prod bundle bucket, which dev and RC portals install from through the dev license server. The run is the
+same action with a different console, different keys and a channel. The repository variable `CONSOLE_DEV_URL`
+overrides the console default, the way `CONSOLE_URL` does on `main`; the bucket is not an input on this side, since
+the upload goes through a URL the dev console issues and lands where that console's grant points. Outside
+DuploCloud's organizations a push to `dev` or `rc` runs nothing, since the console it would reach is DuploCloud's.
+
+The channel keeps the two sides apart on GitHub. A dev build is tagged `<slug>-dev-v<version>-sdk-<sdkVersion>` (an RC
+build `-rc-`) and its release is marked a prerelease, so it never takes the tag the main release of that version will
+use, and a resumed run only ever reads back a release from its own channel. The already-released rule applies within a
+channel: a version released from `dev` whose extension then changes fails the `dev` run until `manifest.version` moves,
+and says nothing about `main`.
+
+The channels are separate on GitHub alone. `dev` and `rc` share the dev console, which holds one build per version and
+SDK, so a version that went through `dev` cannot go through `rc` unchanged: the `rc` run cuts its release and then fails
+at the console with "already holds a build for SDK x that differs from this release", since every run builds afresh and
+the bytes never match the build `dev` registered. A version reaches `rc` under its own `manifest.version`, one that
+`dev` never released.
+
+The dev console issues its own publisher keys, so the non-prod side has its own secrets. In DuploCloud's organizations
+a repository sets `CONSOLE_DEV_API_KEY` and `CONSOLE_DEV_SIGNING_KEY` as secrets and `CONSOLE_DEV_SIGNING_CERT` as a
+variable, beside the prod values. The ArmDot license and the release bot token are the same on both sides. The upload
+goes through a URL the dev console issues, not the publisher role, since the role's trust admits `main` alone. The
+signature travels in the console's artifact record, which is where a portal's installer reads it from, so the non-prod
+bucket holds the bundle alone.
 ## Releasing to your own portal
 
 This section is for a team outside DuploCloud's organizations. The same `release.yml` runs. What differs is
@@ -159,11 +192,15 @@ organization variables:
 | `CONSOLE_SIGNING_CERT` | Organization variable | The publisher's certificate. The same value for every repository |
 | `EXTENSION_PUBLISHER_ROLE_ARN` | Organization variable | The AWS role the workflow assumes, by name, to write to the channels bucket |
 | `ARMDOT_LICENSE_KEY` | Organization secret | Base64 of DuploCloud's ArmDot license file. The reusable release action decodes it to the file `build-extension.sh` reads, so every build it runs obfuscates |
-| `RELEASE_BOT_GITHUB_TOKEN` | Organization secret | A GitHub token that reads the private `duplocloud-internal/.github`, where the ArmDot build files live. The release action fetches them with it before the build |
+| `RELEASE_BOT_GITHUB_TOKEN` | Organization secret, granted per repository | A GitHub token that reads the private `duplocloud-internal/.github`, where the ArmDot build files live. The release action fetches them with it before the build |
+| `CONSOLE_DEV_API_KEY` | Secret, granted per repository | The dev console's API key, used on `dev` and `rc` in place of `CONSOLE_API_KEY` |
+| `CONSOLE_DEV_SIGNING_KEY` | Secret, granted per repository | The dev console publisher's private key PEM, used on `dev` and `rc` |
+| `CONSOLE_DEV_SIGNING_CERT` | Organization variable | The dev console publisher's certificate |
+| `CONSOLE_DEV_URL` | Repository variable, optional | The dev console's URL. Defaults to `https://dev-console.prod-apps.duplocloud.net` |
 
-`release.yml` hands all six to the action. In these organizations the action fails the job before the build
-when the signing key, the certificate, the ArmDot license, the release bot token or the console key is missing, rather than ship an
-unsigned, unprotected or unregistered build. `EXTENSION_PUBLISHER_ROLE_ARN` is assumed through GitHub's OIDC
+`release.yml` hands the side's values to the action. In these organizations the action fails the job before the
+build when the signing key, the certificate, the ArmDot license, the bot token or the console key is missing,
+rather than ship an unsigned, unprotected or unregistered build. `EXTENSION_PUBLISHER_ROLE_ARN` is assumed through GitHub's OIDC
 token (`permissions: id-token: write`) before the action runs, and only a repository the role's trust list
 names can assume it, so a repository outside that list fails at the credentials step, before anything is built.
 
@@ -203,10 +240,71 @@ its requirements file here serve the composite `extension-sign` action only. A r
 action's own copy of `extension-sign.py` and its own pinned requirements, which live in `duplocloud/actions`,
 under that repository's review.
 
+## Moving an existing repository onto this flow
+
+This section is for a DuploCloud repository that still carries the earlier `release.yml`, the one that ran
+`scripts/release-extensions.sh` behind a `.github/extension-publishers.json` allowlist. That file no longer
+grants anything: the publisher role trusts a repository through ai-release's Terraform, and a repository that
+lists itself in the old file fails at the credentials step instead of skipping the upload. The owner's part is
+three steps. Two more are done once per repository by the release team, and most repositories on the first
+extensions release already have them.
+
+### What the owner does
+
+1. **Settle the manifest id.** The console accepts an id only inside a namespace the publishing team holds.
+   DuploCloud's team holds `duplo`, `com.duplo`, `com.duplocloud`, `net.duplo` and `net.duplocloud`; the
+   marketplace release tickets ask for `com.duplocloud.<name>`. Changing an id makes the extension a new record
+   to the console and to every installer, so decide it before the record below exists, and treat installs of
+   the old id as a separate migration.
+2. **Make sure the console record exists.** Under **Agents > Agents** in the prod console, an agent whose
+   manifest id equals the `id` in `manifest.json`, under the publishing team, with its categories, status and
+   access set. Creating it takes a platform owner. The action finds the record by that id and fails the job
+   when none exists.
+3. **Upgrade the devkit.** Run `./scripts/upgrade_dev_kit.sh --version dev` from the repository root. The
+   action-based `release.yml` is on devkit's `dev` branch; `main`, the script's default, still carries the
+   earlier workflow until `dev` is promoted, after which the default is enough (see
+   [upgrading.md](upgrading.md)). The upgrade replaces `.github/` and `scripts/` wholesale, so it brings the
+   new workflow, removes `extension-publishers.json` and refreshes `build-extension.sh`, and it overwrites the
+   framework's files in `build/` while leaving any of your own there. Your extensions, their project files and
+   your own docs are untouched. Open the pull request and let Extension CI run; it builds the bundle the way
+   the release will. Merge to `main`, and the release job cuts one GitHub Release per build, uploads it and
+   registers it as an unpublished version on the console record. The job's log ends with how many builds it
+   released, resumed and failed, with each release's URL above that line, and the repository's Releases page
+   lists them. A platform owner publishes the version once it is checked.
+
+### What the release team does once per repository
+
+These are in place for the repositories that released through the action already. A repository that is new to
+the flow needs both, and the release job says which is missing before the build.
+
+- **The publisher role's trust.** The AWS role's trust policy names each repository whose `main` may assume it,
+  in `extension_publisher_repositories` in ai-release's `terraform/prod/main.tf` (see "The role trust"
+  above). A repository joins through an ai-release PR that adds it with its OIDC subject prefix, read with
+  `gh api repos/<org>/<repo>/actions/oidc/customization/sub --jq .sub_claim_prefix`, and an ai-release
+  maintainer applies it. A repository not yet listed fails at the credentials step, before anything is built.
+- **The per-repository secret grants.** `CONSOLE_SIGNING_KEY` and `CONSOLE_API_KEY` are organization secrets
+  granted per repository, so an organization admin adds the repository to their lists. `CONSOLE_SIGNING_CERT`,
+  `EXTENSION_PUBLISHER_ROLE_ARN` and `ARMDOT_LICENSE_KEY` are organization-wide and need nothing. `DUPLO_HOST`
+  and `DUPLO_TOKEN` stay the repository's own; the token expires, so a release that fails at "Fetching SDK
+  feed" with a 401 needs a fresh one.
+
+### The host's SDK line
+
+A host on extension SDK 1.2 or later ships `net10.0` reference assemblies only. On `dev` the build picks the
+target framework from the host's SDK version and passes it to restore and publish, so a project file that
+names `net8.0` builds `net10.0` against a 1.2 host without an edit, and a `net8.0` build for a host on 1.0 or 1.1
+loads on both. [upgrading.md](upgrading.md#net-10-and-the-target-framework) has the detail. What a release
+still waits on is the toolchain the build runs in: the image pinned by digest in `scripts/_builder.sh` and
+`docker-compose.yml` has to ship the .NET 10 SDK, or the build stops before publishing and names the SDK it
+found. That pin moves in its own change once the image is published, and `release.yml` sets no
+`BUILDER_IMAGE`, so until the pin on the branch you upgrade from names a .NET 10 image, a release against a
+1.2 host fails there.
+
 ## The channels bucket and the license server
 
 In DuploCloud's organizations a signed build uploads to
-`s3://duplo-helpdesk-channels/bundles/[id]/[version]/sdk-[sdkVersion]/` in `us-west-2`, as two objects,
+`s3://duplo-helpdesk-channels/bundles/[id]/[version]/sdk-[sdkVersion]/` in `us-west-2`, as two objects on a push to
+`main`,
 `agent.zip` and `agent.zip.sig`, with the assumed role. Both the bucket name and the console URL can be
 overridden with the `BUNDLE_BUCKET` and `CONSOLE_URL` repository variables. Left unset, they default to the
 production bucket and the production console. Elsewhere the action asks the console for an upload URL with the
@@ -250,6 +348,6 @@ afterward. Once immutable releases are turned on for a repository, which this wo
 can be added to a release after it is cut. The action does not skip that release. It reads back the
 `agent.zip` alone and registers the build with an empty signature, as it does for any unsigned build.
 Outside DuploCloud's organizations it then uploads through the console-issued URL and the run ends clean. In
-DuploCloud's organizations the upload writes two objects through the publisher role, so the run fails at the
+DuploCloud's organizations a `main` release writes two objects through the publisher role, so the run fails at the
 `.sig` upload, after the unsigned build is registered. The way to a signed build is a new `manifest.version`,
 which cuts a new tag and a new release that does get signed.

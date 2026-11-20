@@ -31,7 +31,7 @@
 #                                  `claude setup-token` on this machine). Local development only: it
 #                                  authenticates as you and counts against your Claude Code limits.
 #                                  Ticket titles are not generated on this path (title LLM is Bedrock-only).
-#   ./run.sh --model gateway --gateway-url https://openrouter.ai/api --gateway-token sk-or-... [--gateway-model anthropic/claude-sonnet-5]
+#   ./run.sh --model gateway --gateway-url https://openrouter.ai/api --gateway-token sk-or-... [--gateway-model anthropic/claude-sonnet-5-5]
 #                                  any Anthropic-compatible LLM gateway (OpenRouter, Bifrost, LiteLLM, …). Optional
 #                                  Sets a 262144-token context window and a 200000 compact threshold (a gateway
 #                                  usually serves model ids the CLI does not know, which otherwise have none);
@@ -214,20 +214,63 @@ compose_project() {
 }
 # Mongo takes its root password only when it initialises an empty data volume, so a volume from before
 # MONGO_ROOT_PASSWORD existed still answers to the old fixed password, and a generated one would lock the studio out
-# of it. The volume is looked up by its compose name, and a runtime that cannot list volumes stops the run too, since
-# its empty answer would otherwise read as no volume. A --reset whose teardown worked leaves nothing here to find.
-refuse_old_mongo_volume() {
-  local err
+# of it. Such a volume gets its password rotated in place: mongo is started alone, the root user's password is changed
+# through the old one, and .env is written only once the database has taken the new value. The new value is kept in
+# MONGO_ROOT_PASSWORD_PENDING from before the change until after the write, so a run that stops between the two picks
+# the same value up next time, trying it first and the old password second, and never generates a third. The volume is
+# looked up by its compose name, and a runtime that cannot list volumes stops the run too, since its empty answer would
+# otherwise read as no volume. A --reset whose teardown worked leaves nothing here to find.
+MONGO_OLD_PASSWORD=authpass
+# mongo_eval <password> <js> [compose exec options…]: run one mongosh expression against the admin database, quietly.
+mongo_eval() {
+  local pw="$1" js="$2"; shift 2
+  "$RUNTIME" compose exec -T "$@" mongo mongosh --quiet -u authuser -p "$pw" --authenticationDatabase admin --eval "$js" >/dev/null 2>&1
+}
+# ping needs no credentials, so this tells a mongod that is still starting apart from one that refuses a password.
+mongo_ping() { "$RUNTIME" compose exec -T mongo mongosh --quiet --eval 'db.adminCommand({ping:1})' >/dev/null 2>&1; }
+rotate_old_mongo_password() {
+  local err pending answers="" i
   if ! err="$("$RUNTIME" volume ls -q 2>&1 >/dev/null)"; then
     echo "  ✖ $RUNTIME could not list volumes, so whether MongoDB's data volume predates the generated password is unknown:" >&2
     echo "    $err" >&2
     exit 1
   fi
   "$RUNTIME" volume inspect "$(compose_project)_mongo_data" >/dev/null 2>&1 || return 0
-  echo "  ✖ MongoDB's data volume was initialised with the old fixed password, and this run would generate a new one" >&2
-  echo "    the database does not know. Run ./run.sh --reset to recreate the database with a generated password," >&2
-  echo "    or set MONGO_ROOT_PASSWORD=authpass in .env to keep this database as it is." >&2
-  exit 1
+  pending="$(getenv MONGO_ROOT_PASSWORD_PENDING)"
+  [ -n "$pending" ] || { pending="$(openssl rand -hex 32)"; setenv MONGO_ROOT_PASSWORD_PENDING "$pending"; }
+  echo "==> MongoDB's data volume predates the generated password; rotating the root password in place…"
+  # The image refuses to start with the root username set and the password empty, even over an initialised volume
+  # where it applies neither, so the lone mongo gets the old password for this step. The full start below reads the
+  # new one from .env.
+  MONGO_ROOT_PASSWORD="$MONGO_OLD_PASSWORD" "$RUNTIME" compose up -d mongo >/dev/null 2>&1 \
+    || { echo "  ✖ $RUNTIME could not start mongo to rotate its password." >&2; exit 1; }
+  # Wait for mongod itself first. A large volume replaying on a slow disk can take minutes, and a password tried
+  # before mongod listens looks the same as a wrong one.
+  echo -n "    waiting for MongoDB to answer "
+  for i in $(seq 1 300); do mongo_ping && break; echo -n "."; sleep 2; done
+  if mongo_ping; then echo " up."; else
+    echo " no answer."
+    echo "  ✖ MongoDB did not answer within 10 minutes of starting. Its data is untouched; see '$RUNTIME compose logs mongo'" >&2
+    echo "    and re-run once it comes up." >&2
+    exit 1
+  fi
+  if mongo_eval "$pending" 'db.adminCommand({ping:1})'; then answers=pending
+  elif mongo_eval "$MONGO_OLD_PASSWORD" 'db.adminCommand({ping:1})'; then answers=old
+  fi
+  case "$answers" in
+    pending) ;;   # an earlier run changed it and stopped before writing .env
+    old) mongo_eval "$MONGO_OLD_PASSWORD" 'db.getSiblingDB("admin").changeUserPassword("authuser", process.env.MONGO_NEW_PASSWORD)' \
+           -e "MONGO_NEW_PASSWORD=$pending" \
+           || { echo "  ✖ Changing MongoDB's root password failed. The old password still applies and MONGO_ROOT_PASSWORD was not written;" >&2
+                echo "    MONGO_ROOT_PASSWORD_PENDING in .env holds the value the next run applies." >&2; exit 1; } ;;
+    *) echo "  ✖ MongoDB answered to neither the old fixed root password nor the pending one." >&2
+       echo "    If its root password was changed by hand, set MONGO_ROOT_PASSWORD in .env to it. Otherwise run" >&2
+       echo "    ./run.sh --reset to recreate the database with a generated password." >&2
+       exit 1 ;;
+  esac
+  setenv MONGO_ROOT_PASSWORD "$pending"
+  setenv MONGO_ROOT_PASSWORD_PENDING ""
+  echo "    done. MONGO_ROOT_PASSWORD in .env now holds the new password."
 }
 setenv() {
   python3 - "$ENV" "$1" "${2-}" <<'PY'
@@ -684,7 +727,7 @@ if [ "$RESET" = 1 ]; then
   for k in Authentication__LocalAdminEmail Authentication__LocalAdminPassword Authentication__SuperUsers \
            DEVKIT_MODEL ANTHROPIC_API_KEY AWS_REGION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN \
            CLAUDE_MODEL CLAUDE_EXTRA_MODELS "${GATEWAY_KEYS[@]}" "${SUBSCRIPTION_KEYS[@]}" \
-           Encryption__MasterKey Authentication__JwtSharedSecret MONGO_ROOT_PASSWORD Agent__ApiAuthToken DUPLO_ADMIN_TOKEN EXTENSION_DEV_WORKSPACE_ID \
+           Encryption__MasterKey Authentication__JwtSharedSecret MONGO_ROOT_PASSWORD MONGO_ROOT_PASSWORD_PENDING Agent__ApiAuthToken DUPLO_ADMIN_TOKEN EXTENSION_DEV_WORKSPACE_ID \
            EXTENSION_DEV_PERMSET_ID EXTENSION_DEV_PERMSETGROUP_ID \
            QDRANT_PROVIDER_ID QDRANT_SCOPE_ID QDRANT_COLLECTION_ID; do
     setenv "$k" ""
@@ -767,6 +810,21 @@ prompt() { # var label [secret]
   printf -v "$1" '%s' "$(strip_term_noise "$__v")"
   return "$__rc"
 }
+# A new admin password is typed blind and the database keeps whatever the first run stores (a later
+# .env edit can't change it), so a typo here locks the user out until ./run.sh --reset. Ask twice and
+# require a match; refuse empty. Both entries go through prompt(), so both are sanitized identically.
+# EOF (no tty, Ctrl-D) returns non-zero instead of looping forever.
+prompt_new_password() { # var label
+  local __p1 __p2
+  while :; do
+    prompt __p1 "$2" secret || return
+    [ -n "$__p1" ] || { echo "  Password cannot be empty." >&2; continue; }
+    prompt __p2 "Confirm $2" secret || return
+    [ "$__p1" = "$__p2" ] && break
+    echo "  Passwords do not match — try again." >&2
+  done
+  printf -v "$1" '%s' "$__p1"
+}
 # ── resolve a value: flag > .env > prompt ─────────────────────────────────────
 resolve() { # flagval envkey label [secret]
   local cur="$1" envkey="$2" label="$3" secret="${4-}"
@@ -782,8 +840,8 @@ resolve() { # flagval envkey label [secret]
 # probe proves invoke permission on the exact model the agent will call (not just "some" Bedrock access).
 # BEDROCK_EXTRA_MODELS are offered alongside it in the ticket LLM picker (not probed — a missing Opus
 # inference profile shows up as a failed ticket, not a failed setup).
-BEDROCK_PROBE_MODEL="us.anthropic.claude-sonnet-5"
-BEDROCK_EXTRA_MODELS="us.anthropic.claude-opus-5"
+BEDROCK_PROBE_MODEL="us.anthropic.claude-sonnet-5-5"
+BEDROCK_EXTRA_MODELS="us.anthropic.claude-opus-5-5"
 
 echo "==> Setup (prompts appear only for values not already set)…"
 # Very basic email sanity check: name@example.com (no spaces).
@@ -982,7 +1040,13 @@ if [ -z "$LIC" ]; then
 fi
 # (END LICENSE BLOCK)
 
-PASSWORD="$(resolve "$F_PASSWORD" Authentication__LocalAdminPassword 'Admin password' secret)"
+# Not resolve(): a password typed here is new (flag and .env are both empty), so it is confirmed.
+# --password and an existing .env value are taken as-is, exactly as before.
+PASSWORD="$F_PASSWORD"; [ -z "$PASSWORD" ] && PASSWORD="$(getenv Authentication__LocalAdminPassword)"
+if [ -z "$PASSWORD" ]; then
+  [ "$NONINTERACTIVE" = 1 ] && { echo "Missing Authentication__LocalAdminPassword — pass --password (non-interactive)." >&2; exit 1; }
+  prompt_new_password PASSWORD 'Admin password' || { echo "No password provided — re-run with --password <pw>." >&2; exit 1; }
+fi
 MODEL="$F_MODEL"; [ -z "$MODEL" ] && MODEL="$(getenv DEVKIT_MODEL)"
 if [ -z "$MODEL" ]; then
   [ "$NONINTERACTIVE" = 1 ] && { echo "Missing DEVKIT_MODEL — pass --model 1|2|3|4|5|anthropic|bedrock|gateway|bedrock-instance-role|subscription." >&2; exit 1; }
@@ -1043,23 +1107,27 @@ setenv Authentication__LocalAdminPassword "$PASSWORD"
 setenv Authentication__SuperUsers "$EMAIL"
 setenv DEVKIT_MODEL "$MODEL"
 setenv AIStudio__IsMasterDisabled true
-[ -n "$(getenv Authentication__FrontendBaseUrl)" ] || setenv Authentication__FrontendBaseUrl "http://localhost:$(getenv UI_PORT 2>/dev/null || echo 4200)"
+# getenv always succeeds (it ends in `|| true`), so a blank UI_PORT needs an explicit check — an
+# `$(getenv UI_PORT || echo 4200)` fallback never fires and would store "http://localhost:". 4200 is the
+# same blank-UI_PORT default as below and in docker-compose.yml.
+if [ -z "$(getenv Authentication__FrontendBaseUrl)" ]; then
+  FB_PORT="$(getenv UI_PORT)"; [ -n "$FB_PORT" ] || FB_PORT=4200
+  setenv Authentication__FrontendBaseUrl "http://localhost:$FB_PORT"
+fi
 # Stable secrets: generate once; --reset already blanked them so they regenerate on a fresh DB.
 # -d '\r\n', not just '\n': the MSYS2/mingw64 openssl that ships with Git for Windows wraps base64
 # output at 64 chars using CRLF line endings, not bare LF. Stripping only '\n' left a stray '\r'
 # embedded mid-key, which rendered as a wrapped line in .env and failed the backend's key validation.
 [ -n "$(getenv Encryption__MasterKey)" ] || setenv Encryption__MasterKey "$(openssl rand -base64 96 | tr -d '\r\n')"
 [ -n "$(getenv Authentication__JwtSharedSecret)" ] || setenv Authentication__JwtSharedSecret "$(openssl rand -hex 32)"
-[ -n "$(getenv MONGO_ROOT_PASSWORD)" ] || refuse_old_mongo_volume
-[ -n "$(getenv MONGO_ROOT_PASSWORD)" ] || setenv MONGO_ROOT_PASSWORD "$(openssl rand -hex 32)"
 # The studio sends this as a bearer on every agent call and the agent rejects any call without it. Both read .env.
 [ -n "$(getenv Agent__ApiAuthToken)" ] || setenv Agent__ApiAuthToken "$(openssl rand -hex 32)"
 
 if [ "$MODEL" = anthropic ]; then
   KEY="$(resolve "$F_ANTHROPIC" ANTHROPIC_API_KEY 'Anthropic API key' secret)"
   setenv ANTHROPIC_API_KEY "$KEY"
-  setenv CLAUDE_MODEL "claude-sonnet-5"
-  setenv CLAUDE_EXTRA_MODELS "claude-opus-5"
+  setenv CLAUDE_MODEL "claude-sonnet-5-5"
+  setenv CLAUDE_EXTRA_MODELS "claude-opus-5-5"
   # A gateway URL left over from a previous provider choice would make the agent send this key to the
   # gateway instead of api.anthropic.com (key + URL = "proxy in front of Anthropic"). Warn, don't clear.
   [ -z "$(getenv ANTHROPIC_BASE_URL)" ] || echo "    note: ANTHROPIC_BASE_URL is still set in .env — the agent will send your Anthropic key THERE, not to api.anthropic.com. Clear it (or ./run.sh --reset) unless that's intended."
@@ -1145,7 +1213,15 @@ done
 # Name the runtime here, not only when something breaks: auto-detect is presence-based and docker-first,
 # so on a box with both installed the choice is otherwise invisible until it goes wrong.
 echo "==> Using $(runtime_label)"
-echo "==> Pulling images…"; "$RUNTIME" compose pull
+# A .env from before the mongo password existed has no line for it, and compose warns about an unset variable on
+# the pull, so the pull is given whatever .env holds, blank included.
+echo "==> Pulling images…"; MONGO_ROOT_PASSWORD="$(getenv MONGO_ROOT_PASSWORD)" "$RUNTIME" compose pull
+# The mongo password is settled here, after the pull and every prompt, so a studio already running from before the
+# upgrade keeps a password that works until the start below recreates it with the new one. An install that kept the
+# old fixed password by hand, as the dev tags once offered, is treated as having none, so it rotates as well.
+[ "$(getenv MONGO_ROOT_PASSWORD)" != "$MONGO_OLD_PASSWORD" ] || setenv MONGO_ROOT_PASSWORD ""
+[ -n "$(getenv MONGO_ROOT_PASSWORD)" ] || rotate_old_mongo_password
+[ -n "$(getenv MONGO_ROOT_PASSWORD)" ] || setenv MONGO_ROOT_PASSWORD "$(openssl rand -hex 32)"
 # The installer mounts extensions/. A bind source the runtime has to create comes out root-owned under rootful docker
 # on Linux, which neither fetch-terraform-extension.sh below nor a build could then write.
 mkdir -p extensions
@@ -1320,6 +1396,50 @@ case "$KB_RC" in
   *) echo "    (knowledge base setup failed — run ./scripts/register-qdrant.sh manually)" ;;
 esac
 
+# ── where to open the portal ──────────────────────────────────────────────────
+# Authentication__FrontendBaseUrl is the configured portal address, so a customised host shows up in the
+# banner instead of a localhost link a browser elsewhere can't use. A stored localhost URL, though, is only
+# ever run.sh's own default (written once, above): it goes stale when UI_PORT is moved — the fix
+# docs/troubleshooting.md gives for a port clash — and is "http://localhost:" on installs whose UI_PORT was
+# blank at that first write. So localhost always follows the current UI_PORT; any other host is shown as-is.
+portal_url() { # stored-FrontendBaseUrl ui-port
+  local u="${1%/}"
+  case "$u" in
+    ''|http://localhost:*|http://127.0.0.1:*) printf 'http://localhost:%s' "$2" ;;
+    *) printf '%s' "$u" ;;
+  esac
+}
+PORTAL_URL="$(portal_url "$(getenv Authentication__FrontendBaseUrl)" "$UI_PORT")"
+# The studio wait above says nothing about the UI container, so check it before telling anyone to open it.
+# Probed on localhost:$UI_PORT — what this machine can reach — whatever address the banner shows. Short and
+# non-fatal: a slow UI gets a warning in the final message, not a failed run.
+PORTAL_UP=0
+echo -n "==> Waiting for the portal at http://localhost:$UI_PORT "
+for _ in $(seq 1 10); do
+  curl -fsS -o /dev/null --max-time 3 "http://localhost:$UI_PORT/" 2>/dev/null && { PORTAL_UP=1; echo " ready."; break; }
+  echo -n "."; sleep 3
+done
+[ "$PORTAL_UP" = 1 ] || echo " not answering yet."
+
+# The last thing the run prints: what to open, and how to sign in. It goes after the build/deploy tips on
+# purpose — a URL inside the status block scrolled off behind them and was easy to miss.
+portal_open_message() { # url email up(0|1)
+  local url="$1" email="$2" up="$3" port
+  echo
+  echo "==> Open the portal in your browser:  $url"
+  echo "    Sign in as $email with the admin password you set."
+  [ "$up" = 1 ] || echo "    ⚠ The portal isn't answering yet — give it a minute; if it still won't load, see docs/troubleshooting.md."
+  # Over SSH, localhost is the remote machine, not the browser's. Say how to tunnel the port across.
+  case "$url" in
+    http://localhost:*|http://127.0.0.1:*)
+      if [ -n "${SSH_CONNECTION-}" ]; then
+        port="${url##*:}"; port="${port%%/*}"
+        echo "    (You're on SSH. From your own machine run:  ssh -L $port:localhost:$port <user>@<this-host>  — then open the URL there.)"
+      fi ;;
+  esac
+  return 0
+}
+
 PROVIDER_DESC="$MODEL"
 [ "$MODEL" = bedrock-instance-role ] && PROVIDER_DESC="bedrock via EC2 instance role${AWS_ROLE:+ ($AWS_ROLE)} @ $(getenv AWS_REGION) — no keys in .env"
 [ "$MODEL" = gateway ] && PROVIDER_DESC="LLM gateway @ $(getenv ANTHROPIC_BASE_URL)"
@@ -1328,7 +1448,7 @@ PROVIDER_DESC="$MODEL"
 cat <<EOF
 
 ✔ Platform ready (provider: $PROVIDER_DESC)
-  UI        http://localhost:$UI_PORT     (login: $EMAIL)
+  UI        $PORTAL_URL     (login: $EMAIL)
   API       $API
   Workspace agent-dev  ($WS)  ·  agent registered + attached
   Token     DUPLO_ADMIN_TOKEN set in .env (permanent)
@@ -1345,3 +1465,4 @@ Build & deploy your agent (scripts read the target from .env — no DUPLO_BASE= 
   # re-attach the agent to another workspace: ./scripts/register-agent.sh <workspace-id>
   # attach the devops persona elsewhere:       ./scripts/register-persona.sh <workspace-id>
 EOF
+portal_open_message "$PORTAL_URL" "$EMAIL" "$PORTAL_UP"
