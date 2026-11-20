@@ -170,11 +170,11 @@ You are done when you see:
 Build & deploy your agent (scripts read the target from .env — no DUPLO_BASE= prefix needed):
   ./scripts/build-extension.sh  extensions/<name>               # your agents live in extensions/<name>/
   # the installer service loads each build in extensions/<name>/dist/ by itself, within about 20 seconds
-  # without the installer, or on a remote target: ./scripts/deploy-extension.sh extensions/<name>/dist/extension.zip
+  # without the installer, or on a remote target: ./scripts/deploy-extension.sh extensions/<name>/dist/agent.zip
   # or build every agent:        ./scripts/build-all.sh
   # or build a bundled sample:   ./scripts/build-extension.sh samples/helloworld
   #   then load it, since the installer reads only extensions/:
-  #   ./scripts/deploy-extension.sh samples/helloworld/dist/extension.zip
+  #   ./scripts/deploy-extension.sh samples/helloworld/dist/agent.zip
   # re-attach the agent to another workspace: ./scripts/register-agent.sh <workspace-id>
 
 ==> Open the portal in your browser:  http://localhost:4210
@@ -209,11 +209,10 @@ satisfied. What the values in that banner mean is in
 You are signed in, which means the platform is up and your account works. One thing left to confirm:
 `./run.sh` also created a **workspace** for you to build in, and put you in it.
 
-Look at the top of the page. Next to **Workspace :** the selector reads **EXTENSION-DEV** below (the
-screenshot predates the `agent-dev` rename; a current `./run.sh` names it `AGENT-DEV`). Open it and the
-workspace `./run.sh` created and attached the agent to is listed.
+Look at the top of the page. Next to **Workspace :** the selector reads **AGENT-DEV**. Open it and
+`agent-dev` is listed — that is the workspace `./run.sh` created and attached the agent to.
 
-![The workspace selector at the top of the portal, open, showing the extension-dev workspace](../images/devkit-workspace-selector.png)
+![The workspace selector at the top of the portal, open, showing the agent-dev workspace](../images/devkit-workspace-selector.png)
 
 That is page 1 done. You have the platform running, an account that signs in, and a workspace to work
 in — everything the rest of the guide builds on.

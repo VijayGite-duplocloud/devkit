@@ -57,7 +57,7 @@ To exercise a framework change against a sample, copy it into `extensions/` and 
 ```bash
 cp -R samples/helloworld extensions/helloworld
 ./scripts/build-extension.sh  extensions/helloworld
-./scripts/deploy-extension.sh extensions/helloworld/dist/extension.zip
+./scripts/deploy-extension.sh extensions/helloworld/dist/agent.zip
 ./logs.sh                     # tail everything, or one service
 ```
 

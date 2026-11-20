@@ -75,7 +75,7 @@ read-only view hides the value from them on purpose.
 
 ```bash
 ./scripts/build-extension.sh  samples/admin-settings
-./scripts/deploy-extension.sh samples/admin-settings/dist/extension.zip
+./scripts/deploy-extension.sh samples/admin-settings/dist/agent.zip
 ```
 
 ## Verify

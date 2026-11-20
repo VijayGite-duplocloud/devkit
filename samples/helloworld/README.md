@@ -59,12 +59,12 @@ unzip -o /tmp/sdk.zip -d backend/sdk-packages
 # 4. Assemble the bundle: manifest.json + backend/ (your DLL only) + fe/ + skills/, then zip
 rm -rf pkg; mkdir -p pkg/backend pkg/fe pkg/skills
 cp manifest.json pkg/ ; cp dist/backend/Duplo.Extension.*.dll pkg/backend/ ; cp -r frontend/dist/* pkg/fe/ ; cp -r skills/* pkg/skills/
-rm -f extension.zip   # zip updates in place — drop the stale archive first so the bundle shrinks
-( cd pkg && zip -r ../extension.zip . )
+rm -f agent.zip   # zip updates in place — drop the stale archive first so the bundle shrinks
+( cd pkg && zip -r ../agent.zip . )
 
 # 5. Upload the bundle — the studio unpacks + hot-loads the DLL
 curl -fsS -X POST "$DUPLO_BASE/v1/aiservicedesk/user/data/workspaces/$WS/environment/extension-studio/$ID/load-bundle" \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/zip" --data-binary @extension.zip
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/zip" --data-binary @agent.zip
 ```
 
 See the skill entry point `../../.claude/skills/duplo-extension-dev/SKILL.md` for the full build+load

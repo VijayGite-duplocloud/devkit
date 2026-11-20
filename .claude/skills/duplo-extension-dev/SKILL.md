@@ -361,7 +361,7 @@ status", the "Needs your input" phase) exists **only in Agent mode** ([19](refer
 If you're in a cloned dev-kit repo, **`./scripts/build-extension.sh extensions/<name>`** (or `./scripts/build-all.sh`
 for every agent) does Phases 3–5 in one step (naming gate, fetch + pin the SDK, `dotnet publish`,
 `npm ci && npm run build`, trim the bundle to your agent's own assemblies, assemble
-`extensions/<name>/dist/extension.zip`). The manual steps below are the equivalent — use them in-platform or when
+`extensions/<name>/dist/agent.zip`). The manual steps below are the equivalent — use them in-platform or when
 there's no script. After it succeeds, skip to Phase 6.
 
 ## Phase 3 — fetch the host SDK feed (pin the exact version)
@@ -408,8 +408,8 @@ cp    extensions/<name>/manifest.json   "$PKG/manifest.json"
 cp    extensions/<name>/dist/backend/Duplo.Extension.*.dll "$PKG/backend/"   # + any extra third-party DLL your csproj adds beyond the SDK
 cp -r extensions/<name>/frontend/dist/* "$PKG/fe/"
 cp -r extensions/<name>/skills/*        "$PKG/skills/"
-rm -f extensions/<name>/dist/extension.zip   # zip updates in place — drop the stale archive so the bundle actually shrinks
-( cd "$PKG" && zip -r ../extension.zip . )
+rm -f extensions/<name>/dist/agent.zip   # zip updates in place — drop the stale archive so the bundle actually shrinks
+( cd "$PKG" && zip -r ../agent.zip . )
 ```
 
 ## Phase 6 — load (mode-specific) + write back
@@ -419,19 +419,19 @@ NOT `environment/extensions/…` — that namespace is for the resources agents 
 `RES=${DUPLO_HOST}/v1/aiservicedesk/user/data/workspaces/<ownerWorkspaceId>/environment/extension-studio/<id>`):
 ```bash
 curl -fsS -X POST "$RES/load-bundle" -H "Authorization: Bearer $DUPLO_TOKEN" \
-  -H "Content-Type: application/zip" --data-binary @extensions/<name>/dist/extension.zip
+  -H "Content-Type: application/zip" --data-binary @extensions/<name>/dist/agent.zip
 curl -fsS -X POST "$RES/status" -H "Authorization: Bearer $DUPLO_TOKEN" -H "Content-Type: application/json" \
   -d '{ "status": "Complete", "subStatus": "Agent loaded" }'
 ```
 **Local** (admin token) — in a clone-and-own repo just use the script (reads the target from `.env`/env):
 ```bash
-./scripts/deploy-extension.sh extensions/<name>/dist/extension.zip
+./scripts/deploy-extension.sh extensions/<name>/dist/agent.zip
 ```
 Equivalent raw call:
 ```bash
 curl -fsS -X POST "${DUPLO_BASE}/v1/aiservicedesk/admin/extensions/load-bundle" \
   -H "Authorization: Bearer $DUPLO_TOKEN" -H "Content-Type: application/zip" \
-  --data-binary @extensions/<name>/dist/extension.zip
+  --data-binary @extensions/<name>/dist/agent.zip
 ```
 On failure, capture the endpoint's error body (e.g. SDK-version mismatch, missing entry assembly); in
 in-platform mode POST status `Failed` with a `faults` array. **Bump `manifest.version` before re-loading changed

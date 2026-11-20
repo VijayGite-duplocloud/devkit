@@ -63,7 +63,7 @@ One agent is a single deployable unit that becomes a **first-class resource type
 | Provisioning skill | The instructions the agent follows when a resource of this type is created. |
 | `manifest.json` | Id, version, REST segments, routes, and menus. |
 
-It is packaged as a single `extension.zip`.
+It is packaged as a single `agent.zip`.
 
 ## The build and hot-load loop
 
@@ -74,7 +74,7 @@ It is packaged as a single `extension.zip`.
             │         sdk-version                            │        extensions/load-bundle
             │  GET  …/sdk-bundle                             │
             ▼                                                ▼
-      compile against the        ──►  extension.zip      ──►  studio unpacks, registers,
+      compile against the        ──►  agent.zip      ──►  studio unpacks, registers,
       RUNNING platform's SDK                               and serves the new type
                                                                   │
                                                                   ▼

@@ -5,7 +5,7 @@
 
 Run the DuploCloud Agentic Platform on your laptop in containers, then build your own Agent against it. Each Agent you write ships a backend, a UI, and its own provisioning, and hot-loads into the running platform with no restart.
 
-![The DuploCloud platform running locally, with the New Extension form filled in](docs/images/devkit-new-extension.png)
+![The DuploCloud platform running locally, with the New Agent form filled in](docs/images/devkit-new-extension.png)
 
 ## Why you'd want it
 
@@ -74,7 +74,7 @@ A build already in `dist/` when the installer starts, as after `./run.sh --reset
 does an agent you remove. The installer also leaves alone a build older than the installed version, unless that
 version failed to load.
 
-`./scripts/deploy-extension.sh extensions/[name]/dist/extension.zip` hands that build to the installer while it runs,
+`./scripts/deploy-extension.sh extensions/[name]/dist/agent.zip` hands that build to the installer while it runs,
 waits for the installer to report it, and exits non-zero with the installer's reason when it does not install it. For
 a build the installer leaves alone, with the installer stopped or `EXTENSIONS_ENABLED=false`, for an id in
 `EXTENSIONS_EXCLUDE`, or for a zip outside `extensions/`, it loads the zip itself.

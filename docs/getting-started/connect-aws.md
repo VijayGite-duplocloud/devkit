@@ -149,7 +149,7 @@ is filed in. The wizard offers this straight away, so there is nothing extra to 
 
 3. Click **Attach**.
 
-   ![The Attach Scope to Workspaces dialog with extension-dev selected](../images/devkit-attach-scope-to-workspaces.png)
+   ![The Attach Scope to Workspaces dialog with agent-dev selected](../images/devkit-attach-scope-to-workspaces.png)
 
    The dialog also offers **Skip**. Take it only if you meant to attach the scope later — skipping
    leaves the scope created but invisible to every ticket, which looks exactly like the scope having

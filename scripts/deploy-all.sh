@@ -2,7 +2,7 @@
 # Hot-load every built agent in this repo onto the platform. Run after build-all.sh. Each agent is loaded
 # independently; a failed load fails the run.
 #
-# A build leaves either dist/extension.zip, built from the host's own SDK, or one dist/sdk-<v>/extension.zip per
+# A build leaves either dist/agent.zip, built from the host's own SDK, or one dist/sdk-<v>/agent.zip per
 # version in DUPLO_SDK_VERSIONS. The host loads only a bundle whose sdkVersion equals its own, so for the per-version
 # layout this reads the host's SDK version and loads the bundle stamped with it. An agent with no matching
 # bundle fails the run, since the host would refuse every other one.
@@ -30,8 +30,8 @@ host_sdk_version() {
 # bundle_for <dir>: the bundle the host takes, or nothing with a message when the per-version build has none for it.
 bundle_for() {
   local dir="$1" z sdk
-  [ -f "$dir/dist/extension.zip" ] && { printf '%s\n' "$dir/dist/extension.zip"; return; }
-  local versioned=("$dir"/dist/sdk-*/extension.zip)
+  [ -f "$dir/dist/agent.zip" ] && { printf '%s\n' "$dir/dist/agent.zip"; return; }
+  local versioned=("$dir"/dist/sdk-*/agent.zip)
   [ "${#versioned[@]}" -gt 0 ] || return 0
   sdk="$(host_sdk_version)" || return 1
   for z in "${versioned[@]}"; do

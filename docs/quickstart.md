@@ -118,7 +118,7 @@ attached to a workspace never appears on a ticket.
 
 Pick **agent-dev** under **Workspaces** → **Attach**.
 
-![The Attach Scope to Workspaces dialog with extension-dev selected](images/devkit-attach-scope-to-workspaces.png)
+![The Attach Scope to Workspaces dialog with agent-dev selected](images/devkit-attach-scope-to-workspaces.png)
 
 ## 5. Ask the agent
 

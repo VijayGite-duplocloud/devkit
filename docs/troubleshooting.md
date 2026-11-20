@@ -661,7 +661,7 @@ build and hot-load loop. The installer service loads each build in `extensions/<
 ./scripts/build-extension.sh  extensions/<name>
 ```
 
-On a remote target or a stack without the installer, load it with `./scripts/deploy-extension.sh extensions/<name>/dist/extension.zip`.
+On a remote target or a stack without the installer, load it with `./scripts/deploy-extension.sh extensions/<name>/dist/agent.zip`.
 
 See [Build your first agent](getting-started/build-your-first-extension.md).
 
