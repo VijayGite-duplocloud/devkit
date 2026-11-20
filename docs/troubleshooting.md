@@ -757,43 +757,6 @@ from `.env.example` after the database was already created — the database keep
 
 and `grep DUPLO_ADMIN_TOKEN .env` shows a non-empty value.
 
-### The admin login needs a password change
-
-**Symptom** — `./run.sh` gets as far as the token step, then stops:
-
-```
-==> Minting permanent admin API token…
-Login for you@example.com needs a password change — the admin password doesn't meet the portal password policy
-(at least 12 characters). Either:
-  • log in at http://localhost:4200, set a new password, then re-run: ./run.sh --password '<new password>'
-  • or start over with ./run.sh --reset and choose a password of 12+ characters.
-```
-
-**Why** — the portal requires an admin password of at least 12 characters. `run.sh` refuses a shorter one
-when you first set it, but an install created before that check (or a `.env` carried over from one) can
-still hold a short password. The database accepts it, but the login then answers "change your password
-first" instead of handing out a token, so `run.sh` cannot mint the admin API token.
-
-**Fix** — either of:
-
-- Open the portal, log in with the current password, set a new one of 12+ characters when asked, then
-  store it in `.env` so `run.sh` can log in with it:
-
-  ```bash
-  ./run.sh --password '<new password>'
-  ```
-
-- Or start over with a fresh database and choose a 12+ character password at the prompt:
-
-  ```bash
-  ./run.sh --reset
-  ```
-
-  > `--reset` destroys the database, every loaded extension, and the file store, and blanks your
-  > configured `.env` values. Reach for it only when you do not need the current state.
-
-**Confirm** — `run.sh` reaches `stored DUPLO_ADMIN_TOKEN (never-expiring).`
-
 ---
 
 ## Getting help

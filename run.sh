@@ -1048,7 +1048,7 @@ fi
 # --password and an existing .env value are taken as-is, exactly as before — except that a --password on
 # a fresh install (nothing saved in .env yet, e.g. first run or after --reset) must meet the portal's
 # minimum length. A saved password is never length-checked: the DB already holds it, and refusing it
-# would lock a working install out (the mustChangePassword message at login covers that case instead).
+# would lock a working install out.
 SAVED_PW="$(getenv Authentication__LocalAdminPassword)"
 PASSWORD="$F_PASSWORD"; [ -z "$PASSWORD" ] && PASSWORD="$SAVED_PW"
 if [ -n "$F_PASSWORD" ] && [ -z "$SAVED_PW" ] && [ "${#F_PASSWORD}" -lt "$ADMIN_PW_MIN_LEN" ]; then
@@ -1249,41 +1249,16 @@ done
 
 # ── permanent admin token (idempotent) ────────────────────────────────────────
 token_ok() { curl -fsS -o /dev/null --max-time 6 "$API/v1/aiservicedesk/admin/extensions" -H "Authorization: Bearer $1" 2>/dev/null; }
-# Reads a PasswordLogin response on stdin and prints "<access_token|-> <mustChangePassword 0|1>".
-# Never fails: a missing key, an error page or an empty body all come out as "- 0". It has to be this
-# defensive — under `set -euo pipefail` a KeyError in a $(… | python3) used to abort the whole script
-# silently, before the "Login failed" message below could print (DUPLOAI-5693).
-parse_login_resp() {
-  python3 -c 'import sys,json
-try: d=json.load(sys.stdin)
-except Exception: d=None
-d=d if isinstance(d,dict) else {}
-print(d.get("access_token") or "-", "1" if d.get("mustChangePassword") else "0")' 2>/dev/null || echo "- 0"
-}
-# Explains a login that produced no token. Always returns 1 so the caller can `|| exit 1` — or just exit.
-report_login_failure() { # email must_change ui_port
-  if [ "$2" = 1 ]; then
-    echo "Login for $1 needs a password change — the admin password doesn't meet the portal password policy" >&2
-    echo "(at least $ADMIN_PW_MIN_LEN characters). Either:" >&2
-    echo "  • log in at http://localhost:$3, set a new password, then re-run: ./run.sh --password '<new password>'" >&2
-    echo "  • or start over with ./run.sh --reset and choose a password of $ADMIN_PW_MIN_LEN+ characters." >&2
-  else
-    echo "Login failed for $1 — check the admin email/password (./run.sh --reset to re-enter)." >&2
-  fi
-  return 1
-}
 TOK="$(getenv DUPLO_ADMIN_TOKEN)"
 if [ -z "$TOK" ] || ! token_ok "$TOK"; then
   echo "==> Minting permanent admin API token…"
-  # No -f and `|| true`: an HTTP error or a timeout must reach the message below, not trip set -e.
-  LOGIN_RESP="$(curl -sS --max-time 10 -X POST "$API/api/Account/PasswordLogin" -H "Content-Type: application/json" \
+  # `|| true`: under set -euo pipefail a response without access_token (wrong password, a password below
+  # the portal policy, an HTTP error) made python3's KeyError abort the script silently, before the
+  # "Login failed" message below could print (DUPLOAI-5693). Now it just leaves JWT empty.
+  JWT="$(curl -fsS --max-time 10 -X POST "$API/api/Account/PasswordLogin" -H "Content-Type: application/json" \
         --data "$(E="$EMAIL" P="$PASSWORD" python3 -c 'import json,os;print(json.dumps({"username":os.environ["E"],"password":os.environ["P"]}))')" \
-        2>/dev/null || true)"
-  JWT="-"; MUST_CHANGE=0
-  read -r JWT MUST_CHANGE < <(printf '%s' "$LOGIN_RESP" | parse_login_resp) || true
-  MUST_CHANGE="${MUST_CHANGE%$'\r'}"   # a Windows python3 ends its line with \r\n
-  [ "$JWT" = "-" ] && JWT=""
-  [ -n "$JWT" ] || { report_login_failure "$EMAIL" "$MUST_CHANGE" "$UI_PORT" || exit 1; }
+        | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])' 2>/dev/null || true)"
+  [ -n "$JWT" ] || { echo "Login failed for $EMAIL — check the admin email/password (at least $ADMIN_PW_MIN_LEN characters; ./run.sh --reset to re-enter)." >&2; exit 1; }
   # The server caps active API tokens per user (10). Each mint whose plaintext is lost from .env (a
   # --reset, a fresh .env, a partial run) leaves a stale active token, so re-runs eventually hit the cap
   # and minting 400s. Revoke our own prior 'dev-kit-admin' tokens first so a fresh mint always has room.
