@@ -1045,10 +1045,6 @@ fi
 # (END LICENSE BLOCK)
 
 # Not resolve(): a password typed here is new (flag and .env are both empty), so it is confirmed.
-# --password and an existing .env value are taken as-is, exactly as before — except that a --password on
-# a fresh install (nothing saved in .env yet, e.g. first run or after --reset) must meet the portal's
-# minimum length. A saved password is never length-checked: the DB already holds it, and refusing it
-# would lock a working install out.
 SAVED_PW="$(getenv Authentication__LocalAdminPassword)"
 PASSWORD="$F_PASSWORD"; [ -z "$PASSWORD" ] && PASSWORD="$SAVED_PW"
 if [ -n "$F_PASSWORD" ] && [ -z "$SAVED_PW" ] && [ "${#F_PASSWORD}" -lt "$ADMIN_PW_MIN_LEN" ]; then
