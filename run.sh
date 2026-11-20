@@ -46,7 +46,8 @@
 #
 # On completion it has: obtained a trial license for your admin email (Licensing__Token in .env),
 # pulled+started the stack, minted a permanent admin API token into .env
-# (DUPLO_ADMIN_TOKEN), and created a 'extension-dev' workspace (EXTENSION_DEV_WORKSPACE_ID). All values persist in .env.
+# (DUPLO_ADMIN_TOKEN), created a 'extension-dev' workspace (EXTENSION_DEV_WORKSPACE_ID), and installed the
+# default extensions from the registry (DEVKIT_EXTENSIONS). All values persist in .env.
 set -euo pipefail
 cd "$(dirname "$0")"
 ENV=.env
@@ -1396,6 +1397,24 @@ case "$KB_RC" in
   *) echo "    (knowledge base setup failed — run ./scripts/register-qdrant.sh manually)" ;;
 esac
 
+# ── install the dev-kit's default extensions (idempotent, never fatal) ─────────
+# DUPLOAI-4813: a fresh dev kit comes up with the agents people start from already installed from the extension
+# registry. This list is the one place to add more. An entry is an id (the newest stable version the catalog
+# offers) or id@version (exactly that one). Installs use pin:false, so they keep following registry updates.
+# An id the catalog doesn't list is skipped, and a version that is already current is left alone. Non-fatal, like
+# the KB step above: an extension that failed to install must never stop the platform coming up.
+DEVKIT_EXTENSIONS=(
+  com.duplocloud.demo-cloud-deployment   # Cloud Deployment Agent
+)
+EXT_LINE=""
+echo "==> Installing default extensions…"
+if ./scripts/install-extensions.sh "${DEVKIT_EXTENSIONS[@]}"; then
+  EXT_LINE="
+  Extension ${DEVKIT_EXTENSIONS[*]} → installed or skipped (see output above)"
+else
+  echo "    (extension install incomplete — re-run ./scripts/install-extensions.sh ${DEVKIT_EXTENSIONS[*]})"
+fi
+
 # ── where to open the portal ──────────────────────────────────────────────────
 # Authentication__FrontendBaseUrl is the configured portal address, so a customised host shows up in the
 # banner instead of a localhost link a browser elsewhere can't use. A stored localhost URL, though, is only
@@ -1452,7 +1471,7 @@ cat <<EOF
   API       $API
   Workspace extension-dev  ($WS)  ·  agent registered + attached
   Token     DUPLO_ADMIN_TOKEN set in .env (permanent)
-  License   ${LICENSE_STATUS:-set in .env} (Licensing__Token)$PERSONA_LINE$LLM_LINE$KB_LINE$TF_EXT_LINE
+  License   ${LICENSE_STATUS:-set in .env} (Licensing__Token)$PERSONA_LINE$LLM_LINE$KB_LINE$EXT_LINE$TF_EXT_LINE
 
 Build & deploy your extension (scripts read the target from .env — no DUPLO_BASE= prefix needed):
   ./scripts/build-extension.sh  extensions/<name>               # your extensions live in extensions/<name>/

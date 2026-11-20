@@ -109,3 +109,8 @@ The UI's accessible-workspace list is permission-set based, with no superuser by
 hit every API while the portal still shows no workspaces. `run.sh` therefore creates three things beyond
 the `extension-dev` workspace: a permission set granting it, a permission-set group assigning your user,
 and the workspace itself. Without them, login lands on `/app/auth/no-tenant-access`.
+
+`run.sh` also installs a default set of extensions from the extension registry, listed in its
+`DEVKIT_EXTENSIONS` array (today the Cloud Deployment Agent, `com.duplocloud.demo-cloud-deployment`).
+`scripts/install-extensions.sh` does the work: it skips ids the registry catalog doesn't list, leaves a version
+that is already current alone, and installs with `pin: false`. Run it by hand with any `id` or `id@version`.
