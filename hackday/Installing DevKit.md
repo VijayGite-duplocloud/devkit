@@ -6,7 +6,7 @@
 **Do this before you arrive.** You have six hours on Hack Day — spend them on your agent, not on
 image pulls over conference wifi.
 
-![The DuploCloud platform running locally, with the New Agent form filled in](../docs/images/devkit-new-extension.png)
+![The DuploCloud platform running locally, with the New Extension form filled in](../docs/images/devkit-new-extension.png)
 
 ---
 

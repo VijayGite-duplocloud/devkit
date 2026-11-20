@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build every agent in this repo — one per extensions/<name>/manifest.json — into <dir>/dist/agent.zip.
+# Build every agent in this repo — one per extensions/<name>/manifest.json — into <dir>/dist/extension.zip.
 # A repo can hold many independent agents; this is the canonical "build the whole repo" entrypoint that CI uses.
 #
 # Usage: ./scripts/build-all.sh [--native]

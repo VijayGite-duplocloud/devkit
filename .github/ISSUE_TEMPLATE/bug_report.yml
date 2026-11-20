@@ -22,7 +22,7 @@ body:
       label: What happened
       description: What you did, what you expected, and what happened instead.
       placeholder: |
-        Ran ./scripts/build-extension.sh extensions/foo and expected dist/agent.zip.
+        Ran ./scripts/build-extension.sh extensions/foo and expected dist/extension.zip.
         The frontend step failed with ...
     validations:
       required: true

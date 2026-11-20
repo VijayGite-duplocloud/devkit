@@ -220,12 +220,12 @@ for every `dotnet`, `npm` and `curl` along the way.
 
 From there it runs unattended: scaffold the agent into `extensions/s3-guard/`, pin the host's SDK
 version, compile the C# backend, install and build the Angular remote, package it all into
-`extensions/s3-guard/dist/agent.zip`, and push that bundle into the running platform, which
+`extensions/s3-guard/dist/extension.zip`, and push that bundle into the running platform, which
 hot-loads it. Those last two steps are the same two commands you would run by hand:
 
 ```bash
 ./scripts/build-extension.sh  extensions/s3-guard
-./scripts/deploy-extension.sh extensions/s3-guard/dist/agent.zip
+./scripts/deploy-extension.sh extensions/s3-guard/dist/extension.zip
 ```
 
 With the installer service running, the build alone is enough, since the installer loads it. A build loaded

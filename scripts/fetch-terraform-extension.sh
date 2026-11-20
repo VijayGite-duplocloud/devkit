@@ -95,4 +95,4 @@ mkdir -p "$(dirname "$TF_EXT_DEST")"
 mv "$TMP/src/$TF_EXT_PATH" "$TF_EXT_DEST"
 
 echo "    $TF_EXT_DEST — $(find "$TF_EXT_DEST" -type f | wc -l | tr -d ' ') files, not a git repo. Yours to edit."
-echo "    Build + load it:  ./scripts/build-extension.sh $TF_EXT_DEST && ./scripts/deploy-extension.sh $TF_EXT_DEST/dist/agent.zip"
+echo "    Build + load it:  ./scripts/build-extension.sh $TF_EXT_DEST && ./scripts/deploy-extension.sh $TF_EXT_DEST/dist/extension.zip"

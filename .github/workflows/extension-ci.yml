@@ -98,14 +98,14 @@ jobs:
         if: steps.guard.outputs.build == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: agent-bundles
+          name: extension-bundles
           path: |
-            extensions/*/dist/agent.zip
-            extension/*/dist/agent.zip
-            extension/dist/agent.zip
-            extensions/*/dist/sdk-*/agent.zip
-            extension/*/dist/sdk-*/agent.zip
-            extension/dist/sdk-*/agent.zip
+            extensions/*/dist/extension.zip
+            extension/*/dist/extension.zip
+            extension/dist/extension.zip
+            extensions/*/dist/sdk-*/extension.zip
+            extension/*/dist/sdk-*/extension.zip
+            extension/dist/sdk-*/extension.zip
 
       # Deploy on push to main (auto) or a manual run with deploy=true. PRs build only.
       - name: Deploy all agents (hot-load to DuploCloud)

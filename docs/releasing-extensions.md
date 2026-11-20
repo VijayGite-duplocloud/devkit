@@ -19,7 +19,7 @@ bucket or tag.
 A build is tagged `<slug>-v<version>-sdk-<sdkVersion>`, where `<slug>` is the agent directory's name
 and `<sdkVersion>` comes from the built bundle's own `manifest.json` (stamped by `build-extension.sh` from
 the SDK it built against: the host's, or each version in `DUPLO_SDK_VERSIONS`, which makes one bundle and one
-release per version). The release is cut at the built commit with `agent.zip` attached. A
+release per version). The release is cut at the built commit with `extension.zip` attached. A
 version already released, under this tag shape or the older `<slug>-v<version>` one, is skipped if the
 agent is unchanged since, and fails the run if it changed, since bumping `manifest.version` is the only
 way to tell two different bundles apart.
@@ -35,7 +35,7 @@ ng-common-lib older than 0.5.1 (see the `duplo-extension-theme-migration` skill)
 In every organization the build is uploaded and registered with the console as a new, unpublished version
 of the record whose manifest id equals the bundle's. A version stays unpublished, for a platform owner to
 publish once the build has been verified, unless the run was dispatched with `publish` (see "Publishing on
-register"). In `duplocloud` and `duplocloud-internal` the release also carries `agent.zip.sig`, the
+register"). In `duplocloud` and `duplocloud-internal` the release also carries `extension.zip.sig`, the
 bundle is obfuscated, and a `main` release's upload goes to the channels bucket through the publisher role
 (a `dev` or `rc` release goes through the dev console instead, see the next section). Elsewhere the
 bundle is plain, signed only when the repository supplies its own key and certificate, and the upload goes
@@ -104,7 +104,7 @@ and `DUPLO_TOKEN`, the same secrets Agent CI uses.
 ### What each run produces
 
 A push to `main` builds every agent, cuts one GitHub Release per build, tagged
-`<slug>-v<version>-sdk-<sdkVersion>` with `agent.zip` attached (and `agent.zip.sig` when the
+`<slug>-v<version>-sdk-<sdkVersion>` with `extension.zip` attached (and `extension.zip.sig` when the
 repository signs), and registers the build with the console as a new, unpublished version of your agent
 record. The upload goes through a URL the console issues for your key, valid for 900 seconds and good for
 one create-only write, so the run never holds AWS credentials and never names a bucket. A build already
@@ -132,7 +132,7 @@ registered is published in the console.
 Any repository, not only DuploCloud's own, can sign a build with `.github/actions/extension-sign`, a
 composite action that wraps `scripts/extension-sign.py sign`. It takes three inputs:
 
-- `bundle`, the path to the built `agent.zip`
+- `bundle`, the path to the built `extension.zip`
 - `signing-key`, the publisher's private key PEM, from a secret
 - `signing-cert`, the publisher's certificate, a compact JWS from the console
 
@@ -305,7 +305,7 @@ found. That pin moves in its own change once the image is published, and `releas
 In DuploCloud's organizations a signed build uploads to
 `s3://duplo-helpdesk-channels/bundles/[id]/[version]/sdk-[sdkVersion]/` in `us-west-2`, as two objects on a push to
 `main`,
-`agent.zip` and `agent.zip.sig`, with the assumed role. Both the bucket name and the console URL can be
+`extension.zip` and `extension.zip.sig`, with the assumed role. Both the bucket name and the console URL can be
 overridden with the `BUNDLE_BUCKET` and `CONSOLE_URL` repository variables. Left unset, they default to the
 production bucket and the production console. Elsewhere the action asks the console for an upload URL with the
 console key and uploads through that, so the bucket is never named.
@@ -346,7 +346,7 @@ be re-run. Everything it already finished is a create-only no-op, and it picks u
 A release that was cut before its repository started signing has no `.sig` asset, and it cannot gain one
 afterward. Once immutable releases are turned on for a repository, which this workflow recommends, nothing
 can be added to a release after it is cut. The action does not skip that release. It reads back the
-`agent.zip` alone and registers the build with an empty signature, as it does for any unsigned build.
+`extension.zip` alone and registers the build with an empty signature, as it does for any unsigned build.
 Outside DuploCloud's organizations it then uploads through the console-issued URL and the run ends clean. In
 DuploCloud's organizations a `main` release writes two objects through the publisher role, so the run fails at the
 `.sig` upload, after the unsigned build is registered. The way to a signed build is a new `manifest.version`,
