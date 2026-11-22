@@ -588,7 +588,7 @@ if [ "${#SDK_VERSIONS[@]}" -eq 0 ]; then
   if [ -z "$SDK_VER" ]; then
     echo "ERROR: could not read the host SDK version from $BASE_URL/v1/aiservicedesk/extensions/sdk-version" >&2
     echo "       HTTP $SDK_CODE — response (first 300 chars): $(printf '%s' "$SDK_RESP" | tr -d '\r' | head -c 300)" >&2
-    echo "       Check DUPLO_HOST is the AI Helpdesk studio base URL (serving /v1/aiservicedesk), is reachable," >&2
+    echo "       Check DUPLO_HOST is the DuploCloud AI studio base URL (serving /v1/aiservicedesk), is reachable," >&2
     echo "       has no trailing path, and that TOKEN is set. To build without a host, set DUPLO_SDK_VERSIONS." >&2
     exit 1
   fi

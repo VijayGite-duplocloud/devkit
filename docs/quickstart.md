@@ -1,6 +1,6 @@
 # Quickstart
 
-Zero to a running DuploCloud AI HelpDesk platform, your AWS account connected, and the agent answering a
+Zero to a running DuploCloud AI platform, your AWS account connected, and the agent answering a
 real question about it.
 
 This is the quickstart, so it sticks to the commands and click-paths you need to get running. If you
@@ -298,7 +298,7 @@ the spec and result fields, the provisioning mode, the menu — so Claude Code s
 **one plan** covering the fields, the UI, the files, and the build commands. Approve it once and it
 runs unattended.
 
-When it finishes, it will have packaged your extension and pushed it into your dev-kit HelpDesk. The
+When it finishes, it will have packaged your extension and pushed it into your dev-kit platform. The
 platform hot-loads it — there is nothing to restart.
 
 ### d. See it in the portal
