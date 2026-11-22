@@ -199,7 +199,7 @@ services:
       init-perms:
         condition: service_completed_successfully
 
-  # Docker-in-Docker daemon for the agent, mirroring the dind sidecar in the helpdesk-helm chart.
+  # Docker-in-Docker daemon for the agent, mirroring the dind sidecar in the duplo-ai-helm chart.
   #
   # network_mode joins claude-code-agent's network namespace — the compose equivalent of a pod's
   # shared netns — so dockerd bound to 127.0.0.1 is reachable by the agent and by nothing else: not

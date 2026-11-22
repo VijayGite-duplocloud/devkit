@@ -106,7 +106,7 @@ Pin the published images the stack runs.
 
 | Variable | Default in `.env.example` | Effect |
 | --- | --- | --- |
-| `STUDIO_TAG` | `branch-refs-pull-548-merge-663a7586` | The AI HelpDesk studio image (the platform API). Format is `branch-<sanitized-branch>-<short-sha>`. Pinned to a build that enforces `Licensing:Token` — do not roll it back to a pre-licensing tag. |
+| `STUDIO_TAG` | `branch-refs-pull-548-merge-663a7586` | The DuploCloud AI studio image (the platform API). Format is `branch-<sanitized-branch>-<short-sha>`. Pinned to a build that enforces `Licensing:Token` — do not roll it back to a pre-licensing tag. |
 | `AGENT_TAG` | `main-d27e511` | The `claude-code-agent` image that executes provisioning tickets. A `main` build — it carries no extension-specific changes. |
 | `UI_TAG` | `2a949c536be71efd4501dd60ca6fdda4f7b4676a` | The Angular portal image. A `duplo-ui` git SHA, pinned to a build that renders the license state. |
 | `XTERM_TAG` | `main-d323e0b` | The in-browser terminal image. |
@@ -176,7 +176,7 @@ Where `/duplo-extension` and everything in `scripts/` builds and deploys to. Res
 | Variable | Default | Effect |
 | --- | --- | --- |
 | `DUPLO_TARGET` | `local` | `local` uses this dev-kit stack at `localhost:$STUDIO_PORT`, authenticated with `DUPLO_ADMIN_TOKEN`. `remote` targets an existing DuploCloud platform. |
-| `DUPLO_HOST` | *(empty)* | **Remote only, required.** The AI HelpDesk studio base URL — the host serving `/v1/aiservicedesk`. Use https, with no trailing path. |
+| `DUPLO_HOST` | *(empty)* | **Remote only, required.** The DuploCloud AI studio base URL — the host serving `/v1/aiservicedesk`. Use https, with no trailing path. |
 | `DUPLO_TOKEN` | *(empty)* | **Remote only, required.** An Administrator bearer token for that platform. |
 | `DUPLO_WORKSPACE_ID` | *(empty)* | Remote only. The workspace to author against. If blank, `/duplo-extension` lists the remote's workspaces and asks. |
 
