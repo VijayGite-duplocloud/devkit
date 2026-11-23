@@ -185,14 +185,17 @@ Settle before building (derive, else ask — **after** listening):
   scaffold ships), under a parent entity (child resources), or grouped under the extension's own category node. Does
   any **custom endpoint** need an explicitly granted **named action** instead of plain CRUD (restart / console /
   credential-minting / apply-infrastructure)? — [18-access-control](reference/18-access-control.md).
-- **Menu placement** — where it appears in the AI Suite left-nav, by **title**: a **new top-level group** (e.g.
-  `Jenkins`, `GCP`), **nested under an existing section** (e.g. `DevOps`), or **no menu**. Default to its own
-  group and state it in the summary; ask only when the requirement points two ways. An **admin** resource's tree goes in the **AI Admin** nav: its top-level node carries
+- **Menu placement** — the items it adds to the AI Suite left-nav, or **no menu**. With an **Agent** (below), every
+  top-level `menus[]` node lands under the agent's heading, so settle only the item titles and their order. Without
+  one, placement is by **title**: a **new top-level group** (e.g. `Jenkins`, `GCP`) or **nested under an existing
+  section** (e.g. `Infrastructure`). Default to its own group and state it in the summary; ask only when the
+  requirement points two ways. An **admin** resource's tree goes in the **AI Admin** nav: its top-level node carries
   `"scope": "admin"`, and so does each `routes[]` entry it links to ([21](reference/21-admin-resources.md#frontend)). The user gives titles; **you** generate ids, `relativeUrl`s and the matching `frontend.routes[]` —
   [08-parent-child-and-menus](reference/08-parent-child-and-menus.md). Also settle **title** + **`matIcon`** per
   item — derive the icon from the extension's purpose, per the Left-nav icon bullet above.
-- **Agent** — ask which agent this extension is filed under: DevOps, Compliance, Observability, Release
-  Management, or a typed custom name. Write it verbatim as the **manifest-root** `agent` field (sibling of `id` /
+- **Agent** — ask which agent this extension is filed under: Infrastructure, Compliance, Observability, Release
+  Management, or a typed custom name. `Infrastructure` joins the built-in Infrastructure heading (formerly DevOps);
+  never write `"DevOps"`, which now creates a second, separate heading. Write it verbatim as the **manifest-root** `agent` field (sibling of `id` /
   `name` / `version`; never on a menu node; one agent per extension). Every extension's default heading
   comes from its own manifest `agent` (DuploCloud's own extensions included); an admin can override the section and
   position from the Marketplace, and that override wins and survives upgrades. Only if the author wants to
@@ -234,7 +237,8 @@ endpoint, controller, section id), except under **Technical details** in the sum
 | Custom endpoints | "Besides add, edit and delete, does it need any buttons? For example **Run now** or **View logs**." | none |
 | Access control | Only when a button does something sensitive: "Can anyone in the workspace press **Restart**, or only people you allow?" | anyone in the workspace |
 | One or many resources | Only with more than one thing, and never when one only uses the other (an admin thing that workspaces pick): "Does one **Pipeline** hold many **Jobs**?" | flat; an admin thing plus a workspace thing that picks it follows `samples/admin-settings` |
-| Menu placement | Only when the requirement points two ways: "Where in the left menu: its own **Jenkins** group, or under **DevOps**?" | its own group |
+| Agent | "Which part of the left menu does this belong in: **Infrastructure**, **Compliance**, **Observability**, **Release Management**, or a name of your own?" Ask for a position only if they want to choose one. | Infrastructure for infrastructure work; otherwise ask |
+| Menu placement | Only with no agent and when the requirement points two ways: "Where in the left menu: its own **Jenkins** group, or under **Infrastructure**?" | its own group |
 | Deprovision / teardown | "When someone deletes one here, should the Jenkins job be deleted too?" | delete what provisioning created |
 | Outside auth | "How does Jenkins sign in: username and API token, or a single token?" | from the chosen connection |
 | Admin setup page | Only when the requirement hints at admin-wide settings: "Is there anything an admin should set once for everyone, for example a default Jenkins folder?" | one connection per outside system the requirement names; no settings |

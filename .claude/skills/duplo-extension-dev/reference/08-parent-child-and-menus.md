@@ -123,7 +123,7 @@ and either a `relativeUrl` (a leaf → a route) or `children[]` (a group). The p
 title** and recurses (`mergeExtensionMenuItems`/`upsertMenuNodeByTitle` in `src/app/menu/menu.ts`):
 
 - A top-level tree whose title doesn't exist yet becomes a **new top-level group** (e.g. `Jenkins`, `GCP`).
-- A tree whose **root title matches an existing section** (e.g. `DevOps`) **nests into it** — the existing item is
+- A tree whose **root title matches an existing section** (e.g. `Infrastructure`) **nests into it** — the existing item is
   reused and your children appended. Matching is case-insensitive on the displayed title; **never reference an
   internal `parentGroupId`/id** — title is the only key.
 - One extension may contribute **several** top-level groups (just add more entries to `menus[]`).
@@ -185,7 +185,7 @@ author wants to set its heading order:
 "agent": "Release Management",
 
 // …or, when the author gives a heading order
-"agent": { "name": "Release Management", "order": 3 },
+"agent": { "name": "Release Management", "order": 35 },
 ```
 
 Use the plain string unless the author gives an order.
@@ -200,7 +200,7 @@ Use the plain string unless the author gives an order.
 
 Ask the author to pick one (the starter list), or to type their own:
 
-1. DevOps
+1. Infrastructure
 2. Compliance
 3. Observability
 4. Release Management
@@ -208,7 +208,8 @@ Ask the author to pick one (the starter list), or to type their own:
 
 Write the chosen name **verbatim** — no slugging. Then, only if the author wants to position the heading, ask for a
 heading order and use the object form; otherwise don't ask further. If the author declines to pick an agent,
-**omit the field entirely**; never write `agent: ""`.
+**omit the field entirely**; never write `agent: ""`. An extension with no agent still shows in the nav (by menu
+title, Pattern A above), but the Marketplace lists it under **Other**.
 
 **Validation.** An invalid `agent` is rejected when the extension is uploaded (HTTP 400), and fails the provisioning
 when it is deployed through an extension resource. An extension already installed with an invalid `agent` still
@@ -221,8 +222,11 @@ loads, re-enables and rolls back; it is simply filed under no agent. The rules:
 How the portal places it:
 
 - The portal groups every extension sharing an agent under **one** left-nav heading, titled with the agent name
-  and marked with a shared agent icon. `"DevOps"` merges into the platform's built-in **DevOps** heading rather than
-  creating a second one; under a built-in heading the built-in pages come first, then the agent's extensions.
+  and marked with a shared agent icon. An agent named like a built-in heading joins it rather than creating a second
+  one: `"Infrastructure"` merges into the built-in **Infrastructure** heading (formerly **DevOps**). The match is on
+  the heading's title as the deployment displays it (after `config.json` `labels`), so `"DevOps"` no longer matches
+  it and creates a separate **DevOps** heading. Under a built-in heading the built-in pages come first, then the
+  agent's extensions.
 - **Every top-level `frontend.menus[]` node becomes a child of that heading.** So don't wrap your menus in a node
   titled after the agent — that would render as a same-named sub-group under the heading. A top-level `item` sits
   directly under the heading; a top-level `collapsible-section` becomes a sub-group under it.
@@ -230,23 +234,23 @@ How the portal places it:
   applies to extensions without one.
 - **Menu `order` vs agent `order`.** A menu node's `order` only positions it among the heading's children. A manifest
   agent's `order` is the heading's nav position, used **exactly as given**, in the same number space as the built-in
-  headings (HelpDesk 10, Projects 20, DevOps 30, … Settings 90). A missing order is `0`; ties go by title. If several
+  headings (HelpDesk 10, Projects 20, Infrastructure 30, Scopes 40, KB 50, … Settings 90). A missing order is `0`; ties go by title. If several
   extensions of one manifest agent disagree on `order`, the lowest wins.
 - The deployment's `config.json` → `ai-menu.order`, keyed by the heading id, **overrides** the heading's position:
   - `ai-suite-agent-<slug(name)>` for manifest agents, where the slug keeps runs of `[a-z0-9]` joined by `-`, e.g.
     `ai-suite-agent-release-management`. A name with no ASCII letters or digits gets a hashed id instead.
-  - An agent named like a built-in heading (`DevOps`) sits under that heading, so it moves by the built-in's id
+  - An agent named like a built-in heading (`Infrastructure`) sits under that heading, so it moves by the built-in's id
     (`ai-suite-infrastructure`), not by an `ai-suite-agent-…` key.
 
 ```jsonc
-// manifest.json : filed under the DevOps agent — the item lands directly under the DevOps heading
+// manifest.json : filed under the Infrastructure agent — the item lands directly under the Infrastructure heading
 {
-  "id": "duplo.examples.helloworld", "name": "Hello World", "version": "0.1.0",
-  "agent": "DevOps",
+  "id": "com.duplocloud.helloworld", "name": "Hello World", "version": "0.1.0",
+  "agent": "Infrastructure",
   …
   "frontend": {
     "menus": [
-      { "id": "duplo.examples.helloworld-hello-world", "title": "Hello World", "type": "item",
+      { "id": "com.duplocloud.helloworld-hello-world", "title": "Hello World", "type": "item",
         "matIcon": "star-outline", "relativeUrl": "extensions/helloworlds", "order": 40 }
     ]
   }

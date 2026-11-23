@@ -3,7 +3,7 @@
   "id": "com.duplocloud.networkstack",
   "name": "Network Stack",
   "version": "0.1.0",
-  "agent": "DevOps",
+  "agent": "Infrastructure",
 
   "sdkVersion": "REPLACED_BY_SKILL_FROM_sdk-version_ENDPOINT",
   "backend": {
