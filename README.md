@@ -178,9 +178,9 @@ guides.
   your Agents against it and ship the parts your build bundles into a compiled
   Agents; you may not republish, repackage, or modify it. See [TERMS.md](TERMS.md)
   and the `NOTICE` beside each tarball.
-- **This kit is for local development only.** As more fully described in the
-  [TERMS](TERMS.md), the closed source materials are provided for non-production use only.
-- **Going to production?** Contact **sales@duplocloud.net** for a production license.
+- **Production use is allowed.** The Starter Tier can run in production, within the limits your license sets
+  (for example, the number of users and Agents). For Pro or Enterprise licensing, contact
+  **sales@duplocloud.net**.
 - **Your Agents are yours.** DuploCloud claims no rights in anything you write under
   `extensions/`. See [NOTICE](NOTICE) for the full breakdown.
 
@@ -190,7 +190,7 @@ guides.
 | --- | --- |
 | [LICENSE](LICENSE) | **Apache-2.0** — the dev-kit source DuploCloud authored (`run.sh`, `scripts/`, `samples/`, `docker-compose.yml`, `nginx/`, `.claude/`). Use, modify, and redistribute freely. Does **not** cover the vendored library tarballs under `packages/` or `**/frontend/vendor/`. |
 | [NOTICE](NOTICE) | The boundary: what Apache-2.0 covers, what it doesn't (the container images and the vendored UI library), and the third-party images. Apache-2.0 §4(d) requires you to keep it in any redistribution. |
-| [TERMS.md](TERMS.md) | The proprietary pieces that are *not* Apache-licensed: the **`quay.io/duplocloud/*` container images** (local development only, **no modification**, production requires a separate license) and the **vendored `@duplocloud-internal/ng-common-lib` tarball** (build against it and ship what your build bundles — nothing else). Also confirms you own your extensions. |
+| [TERMS.md](TERMS.md) | The proprietary pieces that are *not* Apache-licensed: the **`quay.io/duplocloud/*` container images** (**no modification**, no redistribution) and the **vendored `@duplocloud-internal/ng-common-lib` tarball** (build against it and ship what your build bundles — nothing else). Also confirms you own your extensions. |
 | [SECURITY.md](SECURITY.md) | Reporting a vulnerability. **Email `ai-reporting@duplocloud.net` — don't open a public issue.** |
 | [PRIVACY.md](PRIVACY.md) | The usage metrics the UI sends if you opt in, tied to your sign-in email — what is collected and what is not. |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | PRs improving the *framework* are welcome. Your own extensions stay in your repo and don't belong upstream. |
@@ -198,4 +198,4 @@ guides.
 | [SUPPORT.md](SUPPORT.md) | Where to get help and what to expect: **GitHub Issues, best effort, no SLA.** Also what belongs somewhere else. |
 
 See [License and use](#license-and-use) above for the short version, or
-**sales@duplocloud.net** for a production license.
+**sales@duplocloud.net** for Pro or Enterprise licensing.

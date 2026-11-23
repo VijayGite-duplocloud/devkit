@@ -7,8 +7,8 @@ Questions people ask before they have a problem. If something is already broken,
 
 ### Can I use this in production?
 
-No. The dev kit and the container images it runs are licensed for **local development only**. See
-[TERMS.md](../TERMS.md). For a production license, contact **sales@duplocloud.net**.
+Yes. The Starter Tier can run in production, within the limits your license sets (for example, the number of
+users and Agents). See [TERMS.md](../TERMS.md). For Pro or Enterprise licensing, contact **sales@duplocloud.net**.
 
 ### What does the license actually let me do?
 
