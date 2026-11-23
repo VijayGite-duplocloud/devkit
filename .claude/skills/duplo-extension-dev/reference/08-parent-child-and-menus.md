@@ -188,7 +188,8 @@ author wants to set its heading order:
 "agent": { "name": "Release Management", "order": 35 },
 ```
 
-Use the plain string unless the author gives an order.
+Use the plain string to join an **existing** (built-in) section, and the object form, always with an order, for a
+**new** one (see below).
 
 **The manifest `agent` decides the default heading; an admin can override it.**
 
@@ -198,16 +199,25 @@ Use the plain string unless the author gives an order.
 - **Admin override** — an admin can change an extension's section and position from the Marketplace (the placement
   picker). The override **wins over the manifest** and **survives upgrades**, so the manifest value is only the default.
 
-Ask the author to pick one (the starter list), or to type their own:
+Ask the author in one question, naming the section and its position (the skill's Agent row has the wording):
 
-1. Infrastructure
-2. Compliance
-3. Observability
-4. Release Management
-5. Something else (type a name)
+> Your agent gets a section in the left menu in the DuploCloud AI platform. Should it join an existing section, like
+> **Infrastructure**, or start a new one: **Compliance**, **Release Management**, or a name of your own? A new section
+> goes just above **Settings** unless you want it somewhere else, for example right after Infrastructure.
 
-Write the chosen name **verbatim** — no slugging. Then, only if the author wants to position the heading, ask for a
-heading order and use the object form; otherwise don't ask further. If the author declines to pick an agent,
+Write the chosen name **verbatim** — no slugging — and:
+
+- **Existing section** (`Infrastructure`, or another built-in heading by its exact displayed title: HelpDesk,
+  Projects, Scopes, KB, Resources, Agent Studio, Analytics, Settings) → the plain string. The built-in keeps its own
+  position, so an order is never written.
+- **New section** → `{ "name": …, "order": N }`, **always with an order**. A new section with no order defaults to
+  `0` and sits at the very top of the nav, above HelpDesk. `N` is `85` (just above Settings) unless the author picks
+  a position: "after <section>" is that section's number + 5 (after Infrastructure → `35`), "at the top" is `5`.
+
+`Observability` is not offered: it reads like the existing **Analytics → Observability** page, but only top-level
+headings are matched, so it would create a second, top-level Observability section.
+
+If the author declines to pick an agent,
 **omit the field entirely**; never write `agent: ""`. An extension with no agent still shows in the nav (by menu
 title, Pattern A above), but the Marketplace lists it under **Other**.
 
