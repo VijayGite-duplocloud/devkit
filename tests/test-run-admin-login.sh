@@ -54,15 +54,15 @@ t "token response → continues with JWT set"
 out="$(login '{"access_token":"abc.def"}' 200 0)"
 if printf '%s' "$out" | grep -q '^JWT=abc.def' && printf '%s' "$out" | grep -qx 'rc=0'; then ok; else bad "out=$out stderr=$(cat "$ERRF")"; fi
 
-t "mustChangePassword (short password) → \"Login failed\" with the 12-character hint, not silently"
+t "mustChangePassword (short password) → \"Login failed\" with the password-policy hint, not silently"
 out="$(login '{"mustChangePassword":true,"challengeCode":"x"}' 200 0)"
-if exited1 "$out" && grep -q 'Login failed for admin@example.com' "$ERRF" && grep -q 'at least 12 characters' "$ERRF"; then ok
+if exited1 "$out" && grep -q 'Login failed for admin@example.com' "$ERRF" && grep -q 'does not meet the portal password policy' "$ERRF"; then ok
 else bad "out=$out stderr=$(cat "$ERRF")"; fi
 
-t "401 (wrong password) → \"Login failed\" pointing at --reset, without the 12-character hint"
+t "401 (wrong password) → \"Login failed\" pointing at --reset, without the password-policy hint"
 out="$(login '{"error":"invalid credentials"}' 401 0)"
 if exited1 "$out" && grep -q 'Login failed for admin@example.com (HTTP 401)' "$ERRF" && grep -q -- '--reset to re-enter' "$ERRF" \
-   && ! grep -q 'at least 12' "$ERRF"; then ok; else bad "out=$out stderr=$(cat "$ERRF")"; fi
+   && ! grep -q 'portal password policy' "$ERRF"; then ok; else bad "out=$out stderr=$(cat "$ERRF")"; fi
 
 t "connection refused (curl exit 7) → \"not reachable\", no --reset advice"
 out="$(login '' 000 7)"
