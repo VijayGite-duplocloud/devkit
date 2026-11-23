@@ -85,9 +85,9 @@ Before it asks you anything, it probes the platform: it reads `DUPLO_TARGET` fro
 whether the local stack answers, along with any remote platform you have configured. Then it asks
 where to build:
 
-> Use the local dev-kit platform, or a remote one?
+> Build against the DuploCloud running on this machine, or one hosted elsewhere?
 
-Choose **local**. That is the stack you brought up on page 1 and connected AWS to on page 2, and it is
+Choose **this machine**. That is the stack you brought up on page 1 and connected AWS to on page 2, and it is
 the target the `scripts/` in this repo read from `.env` as well.
 
 If it reports that the local stack is **down**, `./run.sh` is not running. Start it in another terminal,
@@ -95,14 +95,13 @@ then run the command again.
 
 ## 4.4 Give it the specification
 
-With the target settled, the command asks what you want to build. The question arrives as a set of
-options with **Other** at the bottom. Pick **Other** — the offered options are starting points, and you
-are supplying the whole requirement — then paste the block below into the free-text box.
+With the target settled, the command hands you a short requirement template to fill in: what you want to
+build, what someone fills in, what should happen, and what to show. Paste the block below in its place.
 
 Paste it whole rather than inventing something of your own. Written out this way it settles nearly
-everything the intake would otherwise draw out of you one question at a time — the resource shape, the
+everything the intake would otherwise ask in its one batch of plain questions — the resource shape, the
 provisioning mode, where it lands in the navigation, how results are stored — so the command can go
-almost straight to a plan.
+almost straight to its plan, which opens with **What you'll get**, a plain summary for you to approve.
 
 ```text
 Build an extension called s3-guard: a security posture dashboard for S3 buckets.
@@ -198,20 +197,16 @@ Keep it to this one resource type. Do not add a parent-child hierarchy.
 
 Claude Code does not start building from the paste. It works through the rest of its intake first:
 
-1. **It confirms the name.** It proposes `s3-guard` back to you and says what that name drives — the
-   extension id, the resource type, the REST route under `extensions/`, and the name of the UI remote.
-   Confirm it or change it.
+1. **It asks its questions in one message.** It proposes keeping the name `s3-guard`, offers the saved
+   connections the `extension-dev` workspace has (`aws-readonly` from page 2 is the one you want; the
+   specification already tells it to take whatever AWS connection is there), and asks anything the
+   specification leaves open. The specification is detailed enough that this is mostly confirming its
+   guesses.
 
-2. **It confirms the scope.** It lists the scopes the `extension-dev` workspace actually has and asks
-   which to test with. `aws-readonly` from page 2 is the one you want; the specification already tells
-   it to take whatever AWS scope is there rather than stopping to ask.
-
-3. **It asks anything still genuinely ambiguous.** The specification is detailed enough that this
-   should be short, and it may be nothing at all.
-
-4. **Then it presents one plan.** Not a plan per file — one, covering the whole build: a table of spec
-   fields, a table of result fields, a walkthrough of the UI (where it lands in the left nav, the
-   create form, the list, the Overview and the scan detail), the files it will create under
+2. **Then it presents one plan for the whole build.** It opens with **What you'll get**: a few plain
+   lines on where S3 Security Scan appears in the left menu, what someone fills in, what happens after
+   they save, what the page shows and what delete does. Each default it picked for you follows on its
+   own line. Under **Technical details** come the field tables, the files it will create under
    `extensions/s3-guard/`, and the exact build and deploy commands it intends to run.
 
 Read that plan; it is your one chance to change the shape before anything is written. Then approve it
@@ -227,6 +222,11 @@ hot-loads it. Those last two steps are the same two commands you would run by ha
 ./scripts/build-extension.sh  extensions/s3-guard
 ./scripts/deploy-extension.sh extensions/s3-guard/dist/extension.zip
 ```
+
+With the installer service running, the build alone is enough, since the installer loads it. A build loaded
+by `deploy-extension.sh` is not one the installer reinstalls at the same version, so after a script load,
+bump the version or remove the extension before relying on the installer for a rebuild (see
+[Installing an extension](../../README.md#installing-an-extension)).
 
 Their flags are in the [CLI reference](../cli-reference.md). If the build fails to reach the host SDK,
 that symptom is in [troubleshooting.md](../troubleshooting.md#extensions).

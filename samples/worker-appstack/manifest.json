@@ -1,13 +1,13 @@
 {
   "manifestVersion": "1.0",
-  "id": "duplo.examples.worker-appstack",
+  "id": "com.duplocloud.worker-appstack",
   "name": "Worker AppStack",
   "version": "0.1.0",
   "agent": "DevOps",
 
   "sdkVersion": "REPLACED_BY_SKILL_FROM_sdk-version_ENDPOINT",
   "backend": {
-    "assemblyDir": "duplo.examples.worker-appstack/0.1.0/backend",
+    "assemblyDir": "com.duplocloud.worker-appstack/0.1.0/backend",
     "entryAssembly": "Duplo.Extension.AppStack.dll"
   },
 
@@ -17,7 +17,6 @@
       "restSegment": "extensions/appstacks",
       "subType": "app-stack",
       "archetype": "typed",
-      "registrar": "DevOpsResource",
       "entityType": "Duplo.Extension.AppStack.AppStack",
       "specType": "Duplo.Extension.AppStack.AppStackSpec",
       "resultType": "Duplo.Extension.AppStack.AppStackResult",
@@ -29,12 +28,12 @@
   "frontend": {
     "remote": {
       "remoteName": "duploExtensionAppStack",
-      "remoteEntry": "/v1/aiservicedesk/extensions/duplo.examples.worker-appstack/fe/remoteEntry.json",
+      "remoteEntry": "/v1/aiservicedesk/extensions/com.duplocloud.worker-appstack/fe/remoteEntry.json",
       "exposedModule": "./Extension",
       "type": "module"
     },
     "menus": [
-      { "id": "duplo.examples.worker-appstack-as", "title": "App Stacks", "type": "item", "matIcon": "layers", "relativeUrl": "extensions/appstacks", "order": 43 }
+      { "id": "com.duplocloud.worker-appstack-as", "title": "App Stacks", "type": "item", "matIcon": "layers", "relativeUrl": "extensions/appstacks", "order": 43 }
     ],
     "routes": [
       { "path": "extensions/appstacks", "resourceType": "AppStack", "subType": "app-stack" }

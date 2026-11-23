@@ -11,10 +11,16 @@ services:
     image: mongo:7.0.14
     restart: unless-stopped
     ports:
-      - "${MONGO_PORT:-27017}:27017"
+      # Bound to 127.0.0.1 deliberately: the dev kit is documented as running on EC2 hosts, so a bare
+      # "27017:27017" would hand full read/write on every database to anything that can reach the host.
+      # The studio reaches mongo in-network at mongo:27017. The loopback port stays published so mongosh
+      # and Compass work from the host.
+      - "127.0.0.1:${MONGO_PORT:-27017}:27017"
     environment:
+      # run.sh generates the password once into .env. Mongo applies it only when it initialises an empty
+      # data volume, so changing it later needs ./run.sh --reset.
       - MONGO_INITDB_ROOT_USERNAME=authuser
-      - MONGO_INITDB_ROOT_PASSWORD=authpass
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
       - MONGO_INITDB_DATABASE=auth-service
     volumes:
       # loaded_extensions records live here → previously-loaded extensions are replayed on restart.
@@ -27,9 +33,8 @@ services:
     image: qdrant/qdrant:v1.18.2
     restart: unless-stopped
     ports:
-      # Bound to 127.0.0.1 deliberately, unlike the mongo line above: the fixed API key below is only
-      # safe because nothing off this host can reach Qdrant, and the dev kit is documented as running on
-      # EC2 hosts. A bare "6333:6333" would publish it on every interface.
+      # Bound to 127.0.0.1 for the same reason as mongo above: the fixed API key below is only safe
+      # because nothing off this host can reach Qdrant.
       - "127.0.0.1:${QDRANT_PORT:-6333}:6333"
     environment:
       # Fixed, and deliberately not a secret — Qdrant is reachable only on the compose network and
@@ -43,16 +48,21 @@ services:
       - qdrant_data:/qdrant/storage
 
   # One-shot: chown the shared named volumes to uid 1001 so the non-root studio + agent
-  # (both appuser 1001) can write them. Named volumes are created root-owned, and run.sh
-  # does `down -v` each start, so this must run every startup (see the services' depends_on).
+  # (both appuser 1001) can write them. Named volumes are created root-owned, on first start and again after
+  # `run.sh --reset` or `stop.sh --wipe` removes them, so this runs every startup (see the services' depends_on).
   # Both processes writing as 1001 keeps ticket/skill/extension dirs interoperable.
+  # The installer's state volume goes to 65532 instead, the distroless nonroot user its image runs as.
   init-perms:
     image: busybox:1.36
-    command: ["sh", "-c", "chown -R 1001:1001 /data /extstudio /csessions && echo 'volumes chowned to 1001'"]
+    command:
+      - sh
+      - -c
+      - chown -R 1001:1001 /data /extstudio /csessions && chown -R 65532:65532 /installer && echo 'volumes chowned'
     volumes:
       - platform_data:/data
       - extension_studio_data:/extstudio
       - claude_sessions:/csessions
+      - installer_state:/installer
 
   duplo-ai-studio:
     image: quay.io/duplocloud/backend:${STUDIO_TAG}
@@ -65,7 +75,7 @@ services:
     env_file:
       - ./.env
     environment:
-      - MongoDB__ConnectionString=mongodb://authuser:authpass@mongo:27017/?retryWrites=false
+      - MongoDB__ConnectionString=mongodb://authuser:${MONGO_ROOT_PASSWORD}@mongo:27017/?retryWrites=false
       - MongoDB__DatabaseName=duplo-ai-helpdesk
       - ASPNETCORE_URLS=http://+:60021
       # Published-image paths (Dockerfile.core stages resources at /app; SDK feed + extension-studio dir).
@@ -75,6 +85,7 @@ services:
       # Browser reaches xterm on the published host port, so this must be host-reachable.
       - AIStudio__XtermHost=http://localhost:${XTERM_PORT:-6060}
       - LocalFileStorage__RootPath=/data
+      - Extensions__InstallerUrl=http://installer:8080
     volumes:
       # Shared /data file store (skills + loaded-extension skill files). Shared with the agent so it can
       # read the seeded skills. Survives restart.
@@ -88,13 +99,60 @@ services:
       init-perms:
         condition: service_completed_successfully
 
+  # Installs and upgrades extensions in the studio: each build that changes in extensions/[name]/dist/ while it runs,
+  # and a catalog extension when the Available tab asks. Only the studio calls it, signing each call with the shared JWT
+  # secret, so no host port is published.
+  installer:
+    # Defaults to .env.example's pin, so `docker compose up` before run.sh copies INSTALLER_TAG into .env still starts.
+    image: quay.io/duplocloud/helpdesk-installer:${INSTALLER_TAG:-main-77bb43ca}
+    restart: unless-stopped
+    environment:
+      - INSTALLER_PLATFORM=compose
+      - INSTALLER_BACKEND_URL=http://duplo-ai-studio:60021
+      # The studio service's image, which the status record reports and holds are keyed on.
+      - INSTALLER_BACKEND_IMAGE=quay.io/duplocloud/backend:${STUDIO_TAG}
+      - INSTALLER_STATE_DIR=/var/lib/installer
+      - INSTALLER_LOCAL_DIR=/extensions
+      # One key at a time rather than env_file, so the installer holds none of .env's LLM, AWS or admin credentials.
+      - Authentication__JwtSharedSecret=${Authentication__JwtSharedSecret:-}
+      - Licensing__Token=${Licensing__Token:-}
+      # The selection. With no selection key set, every pass skips as no-release-config and installs nothing, so the
+      # installer reads an empty value as unset.
+      - EXTENSIONS_ENABLED=${EXTENSIONS_ENABLED:-true}
+      - EXTENSIONS_SOURCE=${EXTENSIONS_SOURCE:-customer}
+      - EXTENSIONS_EXCLUDE=${EXTENSIONS_EXCLUDE:-}
+      - EXTENSIONS_RESET_AT=${EXTENSIONS_RESET_AT:-}
+      - EXTENSIONS_UPDATE_INSTALLED=${EXTENSIONS_UPDATE_INSTALLED:-}
+      - EXTENSIONS_FROZEN=${EXTENSIONS_FROZEN:-}
+      - EXTENSIONS_DRY_RUN=${EXTENSIONS_DRY_RUN:-}
+      - EXTENSIONS_OPT_OUT=${EXTENSIONS_OPT_OUT:-}
+      - EXTENSIONS_LAYERS=${EXTENSIONS_LAYERS:-}
+      - EXTENSIONS_CONFIG_INVALID=${EXTENSIONS_CONFIG_INVALID:-}
+      - EXTENSIONS_ENROLLMENT_ID=${EXTENSIONS_ENROLLMENT_ID:-}
+      # The license server's catalog, off while LICENSE_SERVER_URL is empty, so the installer runs on local builds only.
+      - LICENSE_SERVER_URL=${LICENSE_SERVER_URL:-}
+      - URL_ROUTE_URL=${URL_ROUTE_URL:-}
+      - CHANNELS_BASE_URL=${CHANNELS_BASE_URL:-}
+      - CHANNELS_BUCKET=${CHANNELS_BUCKET:-}
+    volumes:
+      # The status record. A named volume, so it survives a recreate and goes with the database on `down -v`.
+      - installer_state:/var/lib/installer
+      - ./extensions:/extensions:ro
+    depends_on:
+      init-perms:
+        condition: service_completed_successfully
+
+  # No published port. The exec endpoint runs scripts inside this container, which holds the LLM and cloud
+  # credentials and reaches the privileged dind daemon. The studio reaches it in-network at
+  # http://claude-code-agent:8000, which is all anything needs.
   claude-code-agent:
     image: quay.io/duplocloud/duplo-agent:${AGENT_TAG}
     restart: unless-stopped
-    ports:
-      - "${AGENT_PORT:-8000}:8000"
     environment:
       - PERSISTENT_VOLUME_STORAGE=/data
+      # Every route but health requires this bearer once it is set. The studio reads the same value from .env
+      # through its env_file and sends it on each agent call. Empty, the agent accepts any caller.
+      - CCA_API_AUTH_TOKEN=${Agent__ApiAuthToken:-}
       - AGENT_CALLBACK_BASE_URL=http://duplo-ai-studio:60021
       - DCAF_TOOL_CALL_LIMIT=15
       - DCAF_DEFAULT_TOOLKIT=true
@@ -107,7 +165,7 @@ services:
       # ── LLM provider (agent picks by precedence: ANTHROPIC_API_KEY → gateway (ANTHROPIC_BASE_URL
       #    without a key) → Azure Foundry → CLAUDE_CODE_OAUTH_TOKEN → AWS Bedrock). Set the one you use
       #    in .env; the rest stay empty. ──
-      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-5}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-5-5}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       # Your own Claude Code subscription (`./run.sh --model subscription`). Sits next-to-last in the
       # agent's precedence chain, deliberately: a token exported in a shell must never displace a
@@ -127,6 +185,10 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-}
+      # Docker-in-Docker: the dind service shares this container's network namespace, so its daemon
+      # is reachable on loopback here and nowhere else.
+      - DOCKER_HOST=tcp://127.0.0.1:2375
+      - CCA_ENABLE_DOCKER=true
     volumes:
       # Shared /data so the agent reads the skills the studio seeded (CCA reads /data/skills).
       - platform_data:/data
@@ -136,6 +198,46 @@ services:
     depends_on:
       init-perms:
         condition: service_completed_successfully
+
+  # Docker-in-Docker daemon for the agent, mirroring the dind sidecar in the duplo-ai-helm chart.
+  #
+  # network_mode joins claude-code-agent's network namespace — the compose equivalent of a pod's
+  # shared netns — so dockerd bound to 127.0.0.1 is reachable by the agent and by nothing else: not
+  # the compose network, not the host. The agent keeps owning its network identity, so
+  # http://claude-code-agent:8000 still resolves for the studio. The agent cannot depends_on this
+  # service (network_mode already makes this one depend on the agent); docker calls simply fail for
+  # the few seconds until the daemon is up.
+  #
+  # The image entrypoint is bypassed: with TLS off it force-binds tcp://0.0.0.0:2375 and ignores any
+  # --host passed. modprobe replicates the entrypoint's kernel-module loading; --tls=false suppresses
+  # the insecure-bind startup delay.
+  dind:
+    image: docker:27-dind
+    restart: unless-stopped
+    privileged: true
+    network_mode: "service:claude-code-agent"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        modprobe ip_tables || true
+        modprobe ip6_tables || true
+        modprobe nf_tables || true
+        modprobe overlay || true
+        exec dockerd --host=tcp://127.0.0.1:2375 --tls=false
+    environment:
+      - DOCKER_HOST=tcp://127.0.0.1:2375
+    healthcheck:
+      test: ["CMD", "docker", "info"]
+      interval: 10s
+      start_period: 5s
+    volumes:
+      # Same /data as the agent, so `docker run -v /data/...` bind-mount paths resolve daemon-side.
+      - platform_data:/data
+      # Image/container storage. Wiped with the rest by run.sh's `down -v`, like the chart's emptyDir.
+      - dind_storage:/var/lib/docker
+    depends_on:
+      claude-code-agent:
+        condition: service_started
 
   # Renders nginx/default.conf into a volume with the DNS resolver this runtime actually uses.
   #
@@ -182,16 +284,21 @@ services:
       init-nginx-conf:
         condition: service_completed_successfully
 
+  # Published on loopback only: the container runs privileged and the terminal server authenticates nobody, so a
+  # bare "6060:6060" would hand a root shell on this host to anything that can reach it. The browser reaches it at
+  # http://localhost:$XTERM_PORT (AIStudio__XtermHost above), which loopback still serves.
   xterm:
     image: quay.io/duplocloud/duplo-xterm:${XTERM_TAG:-main-d323e0b}
     restart: unless-stopped
     privileged: true
     ports:
-      - "${XTERM_PORT:-6060}:6060"
+      - "127.0.0.1:${XTERM_PORT:-6060}:6060"
     environment:
-      - CORS_ORIGIN=*
+      # The origins the socket.io server accepts, unset meaning every origin. The portal is served from
+      # localhost on UI_PORT, and some people type 127.0.0.1 instead, so both are listed.
+      - ALLOWED_ORIGINS=http://localhost:${UI_PORT:-4200},http://127.0.0.1:${UI_PORT:-4200}
 
-  # Build toolchain for extensions (.NET SDK 8 + Node 22). Behind a profile so the `compose pull`
+  # Build toolchain for extensions (.NET SDK 10 + Node 22). Behind a profile so the `compose pull`
   # and `up` in run.sh skip it entirely — a user who only runs the platform never downloads it. The
   # build wrapper starts it on demand with `$RUNTIME compose run --rm --no-deps builder`.
   #
@@ -204,14 +311,14 @@ services:
   # below). Both routes are live; the compose network is simply the preferred one.
   builder:
     profiles: [tools]
-    # Deliberately ONE level of interpolation, not a nested ${BUILDER_IMAGE:-…:${BUILDER_TAG:-latest}}:
+    # Deliberately ONE level of interpolation, not a nested ${BUILDER_IMAGE:-…:${BUILDER_TAG:-…}}:
     # podman-compose 1.5 stops at the first '}' and appends the remainder literally, yielding
     # "…busybox:1.36}" and an "invalid reference format" error even when BUILDER_IMAGE is set. Nothing
-    # is lost — BUILDER_TAG is resolved into BUILDER_IMAGE by scripts/_builder.sh:builder_resolve_image,
-    # which always exports it before compose is invoked, so the default below is only ever reached by a
-    # hand-run `compose run` with no BUILDER_IMAGE set (where it now means :latest regardless of
-    # BUILDER_TAG — use the build scripts, or set BUILDER_IMAGE outright, to pin another tag).
-    image: ${BUILDER_IMAGE:-quay.io/duplocloud/duplo-extension-builder:latest}
+    # is lost — scripts/_builder.sh:builder_resolve_image resolves BUILDER_TAG and exports BUILDER_IMAGE
+    # before every build, so the default below is only ever reached by a hand-run `compose run` with no
+    # BUILDER_IMAGE set. It is the digest-pinned toolchain regardless of BUILDER_TAG, and must match
+    # _BUILDER_PINNED_IMAGE there (use the build scripts, or set BUILDER_IMAGE outright, to pick another).
+    image: ${BUILDER_IMAGE:-quay.io/duplocloud/duplo-extension-builder@sha256:c53105d199f6f9c1106a48becc8fb031124b34cc74069eee4ed8ff06d28b5dc0}
     # Unset by default, so the build runs on the host's native architecture. Set BUILDER_PLATFORM only
     # to force one (e.g. linux/amd64 if a publish ever ends up amd64-only) — an unset value is dropped
     # by compose, whereas copying duplo-ai-studio's linux/amd64 default would silently emulate a .NET
@@ -240,6 +347,13 @@ services:
       # change if a cache path is ever added, and it explains the per-uid volume names below).
       - nuget_cache:/cache/nuget
       - npm_cache:/cache/npm
+      # The ArmDot license file. /dev/null stands in when none is set, so the mount is always valid and the
+      # variable below stays empty, which build-extension.sh reads as "do not obfuscate".
+      - ${ARMDOT_LICENSE_FILE_PATH:-/dev/null}:/run/armdot/license.key:ro
+      # The ArmDot build files, a checkout of armdot/ from duplocloud-internal/.github. The repository's own
+      # build/ stands in when none is set, so the mount is always valid; it holds none of the files, and a
+      # licensed build then fails naming DUPLO_ARMDOT_DIR.
+      - ${DUPLO_ARMDOT_DIR:-./build}:/run/armdot/config:ro
     environment:
       - DUPLO_BUILD_NATIVE=1
       - DUPLO_TARGET=${DUPLO_TARGET:-local}
@@ -252,6 +366,9 @@ services:
       - DUPLO_HOST=${DUPLO_HOST:-}
       - DUPLO_TOKEN=${DUPLO_TOKEN:-}
       - DUPLO_ADMIN_TOKEN=${DUPLO_ADMIN_TOKEN:-}
+      - ARMDOT_LICENSE_FILE_PATH=${ARMDOT_LICENSE_FILE_PATH:+/run/armdot/license.key}
+      - DUPLO_SDK_VERSIONS=${DUPLO_SDK_VERSIONS:-}
+      - DUPLO_ARMDOT_DIR=${DUPLO_ARMDOT_DIR:+/run/armdot/config}
 
 volumes:
   nginx_conf:
@@ -260,6 +377,8 @@ volumes:
   extension_studio_data:
   claude_sessions:
   qdrant_data:
+  installer_state:
+  dind_storage:
   # Keyed by uid on purpose: these are written as the calling user (see the service's `user:`), and one
   # uid's runtime-created cache subdirectories are not writable by another, so sharing a single pair
   # would break the second uid to build. build/Dockerfile.builder has the full reasoning, including why

@@ -1,6 +1,6 @@
 # Quickstart
 
-Zero to a running DuploCloud AI HelpDesk platform, your AWS account connected, and the agent answering a
+Zero to a running DuploCloud AI platform, your AWS account connected, and the agent answering a
 real question about it.
 
 This is the quickstart, so it sticks to the commands and click-paths you need to get running. If you
@@ -46,11 +46,12 @@ docker --version && docker compose version
    own. If the wait times out nothing is lost — click the link, re-run `./run.sh`, and it resumes the same
    request without sending a second email.
 
-   The remaining prompts: `Admin password:` (remembered by the database, not changeable by editing `.env`
-   later) and `Select LLM provider:` → `Enter 1 or 2:` (`1` anthropic, `2` bedrock) and its key.
+   The remaining prompts: `Admin password:` and `Confirm Admin password:` (remembered by the database, not
+   changeable by editing `.env` later) and `Select LLM provider:` → `Enter 1 or 2:` (`1` anthropic, `2` bedrock) and its key.
 
-4. `./run.sh` prints a `✔ Platform ready` summary when the stack is up. Sign in at
-   <http://localhost:4210> with that email and password. You land with the `extension-dev` workspace
+4. `./run.sh` prints a `✔ Platform ready` summary when the stack is up, and ends with
+   `==> Open the portal in your browser:` and the URL. Sign in there (by default
+   <http://localhost:4210>) with that email and password. You land with the `extension-dev` workspace
    selected.
 
 You cannot file a ticket yet — a ticket requires a scope, which step 4 creates.
@@ -185,20 +186,20 @@ Start Claude Code there. It picks up the `.claude/` directory in this repo, whic
 
 It probes your platform first, then asks where to build:
 
-> Use the local dev-kit platform, or a remote one?
+> Build against the DuploCloud running on this machine, or one hosted elsewhere?
 
-Choose **local** — that is the stack you have been running all quickstart.
+Choose **this machine** — that is the stack you have been running all quickstart.
 
 If it reports the local stack is down, `./run.sh` is not running. Start it and run the command again.
 
 ### c. Paste this specification
 
-Next it asks what you want to build, as a set of options with **Other** at the bottom. Pick **Other** —
-the offered options are starting points, and you are going to supply the whole thing — then paste the
-block below into the free-text box.
+Next it hands you a short requirement template to fill in: what you want to build, what someone fills in,
+what should happen, and what to show. Paste the block below in its place.
 
-It answers everything the intake would otherwise ask you one
-question at a time, so the command goes almost straight to a plan:
+It answers everything the intake would otherwise ask in its one batch of plain questions ("When someone adds
+one, what do they fill in?"), so the command goes almost straight to its plan. The plan opens with **What
+you'll get**, a plain summary for you to approve:
 
 ```text
 Build an extension called whois: a domain lookup resource. You give it a domain name, it
@@ -297,7 +298,7 @@ the spec and result fields, the provisioning mode, the menu — so Claude Code s
 **one plan** covering the fields, the UI, the files, and the build commands. Approve it once and it
 runs unattended.
 
-When it finishes, it will have packaged your extension and pushed it into your dev-kit HelpDesk. The
+When it finishes, it will have packaged your extension and pushed it into your dev-kit platform. The
 platform hot-loads it — there is nothing to restart.
 
 ### d. See it in the portal

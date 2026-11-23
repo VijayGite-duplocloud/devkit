@@ -1,6 +1,6 @@
 import { Component, OnInit, inject, signal, viewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { FormGroupErrorsComponent, SharedFormsModule } from '@duplocloud-internal/ng-common-lib';
+import { AiDisclosureComponent, FormGroupErrorsComponent, SharedFormsModule } from '@duplocloud-internal/ng-common-lib';
 import { HelloService } from '../hello.service';
 
 // Add/Edit form in the platform's 3-column `panel-form-accordion` layout: title+description (left), inputs
@@ -9,17 +9,15 @@ import { HelloService } from '../hello.service';
 // global CSS, and the published lib ships compiled CSS only) — so a remote must carry the layout rules in
 // its own component `styles` (below).
 //
-// Forms stay template-driven (the platform convention), but each field is a signal bound one-way with an
-// explicit (ngModelChange) writer: `[(ngModel)]="sig"` would compile to `sig = $event`, which cannot assign
-// to a signal. Signals also keep the component correct under Angular 22's default OnPush strategy — the
-// edit-mode prefill below arrives from an async subscribe, which would not repaint a plain field.
+// Template-driven, one signal per field (OnPush-safe for the async edit prefill); `[(ngModel)]` on a signal also
+// works, the explicit pair is for clarity.
 // SharedFormsModule re-exports FormsModule plus form-field and every validation directive used here.
 @Component({
   selector: 'hw-add',
-  imports: [SharedFormsModule],
+  imports: [SharedFormsModule, AiDisclosureComponent],
   styles: [`
     :host { display: block; }
-    .panel-form-accordion { background: #fff; padding: 1.25rem 0 1rem 1.5rem; }
+    .panel-form-accordion { background: var(--surface); padding: 1.25rem 0 1rem 1.5rem; }
     .panel-content-title { width: 265px; min-width: 265px; }
     .panel-content-title-sub-text { max-width: 220px; }
     .panel-content-form { max-width: 768px; flex: 1 1 auto; margin: 0 1rem; padding: 0 1rem; }
@@ -73,6 +71,8 @@ import { HelloService } from '../hello.service';
                     {{ isEdit ? 'Save' : 'Provision' }}
                   </button>
                 </div>
+                <!-- Agent mode only (ISO 42001): remove with the ticket UI when converting to Worker/Passthrough. -->
+                <app-ai-disclosure class="mt-1" />
               </div>
             </form>
           }

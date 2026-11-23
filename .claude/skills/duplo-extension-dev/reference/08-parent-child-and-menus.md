@@ -93,13 +93,13 @@ DI container** (`ExtensionRegistrar.RegisterExtension` registers each resource's
 "resources": [
   {
     "ticketOriginType": "HelloParent", "restSegment": "extensions/hello-parents", "subType": "hello-parent",
-    "archetype": "typed", "registrar": "DevOpsResource",
+    "archetype": "typed",
     "entityType": "…HelloParent", "specType": "…HelloParentSpec", "resultType": "…HelloParentResult",
     "hooksType": "…HelloParentHooks", "serviceType": "…HelloParentService"
   },
   {
     "ticketOriginType": "HelloChild", "restSegment": "hello-children", "subType": "hello-child",   // CHILD restSegment is BARE by design — the extensions/ namespacing comes from the parent route (00-naming carve-out)
-    "archetype": "typed", "registrar": "DevOpsResource",
+    "archetype": "typed",
     "parent": {                                  // ← links child to parent (nested under it)
       "ticketOriginType": "HelloParent",
       "routeSegment": "extensions/hello-parents",   // namespaced; MUST equal the parent's restSegment
@@ -138,17 +138,23 @@ title** and recurses (`mergeExtensionMenuItems`/`upsertMenuNodeByTitle` in `src/
 ```jsonc
 // manifest.json → frontend.menus : one tree per top-level title (here a new "Hello" group)
 "menus": [
-  { "id": "duplo.examples.helloworld-hello", "title": "Hello", "type": "collapsible-section",
+  { "id": "com.duplocloud.helloworld-hello", "title": "Hello", "type": "collapsible-section",
     "matIcon": "package-variant", "order": 60,
     "children": [
-      { "id": "duplo.examples.helloworld-hello-parents", "title": "Parents", "type": "item",
+      { "id": "com.duplocloud.helloworld-hello-parents", "title": "Parents", "type": "item",
         "matIcon": "folder-outline", "relativeUrl": "extensions/hello-parents", "order": 1 },
-      { "id": "duplo.examples.helloworld-hello-children", "title": "All Children", "type": "item",
+      { "id": "com.duplocloud.helloworld-hello-children", "title": "All Children", "type": "item",
         "matIcon": "file-outline", "relativeUrl": "extensions/hello-children", "order": 2 }
     ]
   }
 ]
 ```
+
+**AI Admin menus.** Put `"scope": "admin"` on a tree's **top-level** node to merge it into the AI Admin nav
+instead of AI DevOps (title matching works the same there); nested nodes never carry `scope`. Every link in an admin
+tree needs a `routes[]` entry with the same `path` and `"scope": "admin"` (mounted at `/ai/suite/admin/<path>`). An
+extension that surfaces on both sides declares one tree per side. An admin-scoped parent's child controller applies
+the admin overrides itself — see [21-admin-resources](21-admin-resources.md#backend).
 
 > Legacy: a single `frontend.menu = { parentGroupId, node }` still loads (merged into a group by id) but is
 > **deprecated** — new extensions MUST use `menus[]`.
@@ -297,6 +303,9 @@ studio API — `UI_PORT` locally):
 curl -fsS http://localhost:${UI_PORT:-4210}/assets/images/icons/mdi.svg | grep -c 'id="shield-check"'   # 1 = present, 0 = blank box
 curl -fsS http://localhost:${UI_PORT:-4210}/assets/images/icons/duplo.svg | grep -o 'id="[a-z0-9-]*"'   # the brand set
 ```
+
+### Header actions vs menus
+Menus add a page to the left nav. Header actions add a button to the top navbar that runs code (open a modal, navigate) on `/ai/` pages (AI Admin only with `showInAdmin: true`). Use a menu for a page; use a header action for a quick, page-independent command. See [02-authoring-guide](02-authoring-guide.md#frontendheaderactions).
 
 ### Pattern B — child inside the parent's detail view (tightly-coupled children)
 Don't give the child its own menu entry. Instead, the parent's **view** component renders a tab of its children
