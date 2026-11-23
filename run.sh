@@ -650,6 +650,24 @@ license_wait_failed() { # rc id [trial|recovery]
   esac
 }
 
+# Portal password policy (backend): the admin password must be at least this long. A shorter one is
+# accepted by the DB seed, but the first login then returns mustChangePassword instead of a token.
+ADMIN_PW_MIN_LEN=12
+# Refuses a --password that is too short when there is no saved password for it to replace. A saved one
+# is taken as-is, so an existing install with a shorter password isn't locked out.
+check_flag_password() { # flag_pw saved_pw
+  if [ -n "$1" ] && [ -z "$2" ] && [ "${#1}" -lt "$ADMIN_PW_MIN_LEN" ]; then
+    echo "--password must be at least $ADMIN_PW_MIN_LEN characters (portal password policy)." >&2
+    return 1
+  fi
+  return 0
+}
+
+# ── pre-flight: --password length (run before --reset tears anything down or a license is requested) ──
+# --reset blanks the saved password further down, so with --reset there is no saved password to keep.
+PF_SAVED_PW=""; [ "$RESET" = 1 ] || PF_SAVED_PW="$(getenv Authentication__LocalAdminPassword)"
+check_flag_password "$F_PASSWORD" "$PF_SAVED_PW" || exit 1
+
 # ── pre-flight: license checks (run before ANYTHING is written) ───────────────
 # A license is not re-issuable: the server issues exactly ONE trial per email address. It is, however,
 # RECOVERABLE — the server will email the licensee a link that releases the same license to this dev kit —
@@ -814,9 +832,6 @@ prompt() { # var label [secret]
 # .env edit can't change it), so a typo here locks the user out until ./run.sh --reset. Ask twice and
 # require a match; refuse empty. Both entries go through prompt(), so both are sanitized identically.
 # EOF (no tty, Ctrl-D) returns non-zero instead of looping forever.
-# Portal password policy (backend): the admin password must be at least this long. A shorter one is
-# accepted by the DB seed, but the first login then returns mustChangePassword instead of a token.
-ADMIN_PW_MIN_LEN=12
 prompt_new_password() { # var label
   local __p1 __p2
   while :; do
@@ -1045,11 +1060,9 @@ fi
 # (END LICENSE BLOCK)
 
 # Not resolve(): a password typed here is new (flag and .env are both empty), so it is confirmed.
+# A short --password was already refused in pre-flight (check_flag_password).
 SAVED_PW="$(getenv Authentication__LocalAdminPassword)"
 PASSWORD="$F_PASSWORD"; [ -z "$PASSWORD" ] && PASSWORD="$SAVED_PW"
-if [ -n "$F_PASSWORD" ] && [ -z "$SAVED_PW" ] && [ "${#F_PASSWORD}" -lt "$ADMIN_PW_MIN_LEN" ]; then
-  echo "--password must be at least $ADMIN_PW_MIN_LEN characters (portal password policy)." >&2; exit 1
-fi
 if [ -z "$PASSWORD" ]; then
   [ "$NONINTERACTIVE" = 1 ] && { echo "Missing Authentication__LocalAdminPassword — pass --password (non-interactive)." >&2; exit 1; }
   prompt_new_password PASSWORD 'Admin password' || { echo "No password provided — re-run with --password <pw>." >&2; exit 1; }

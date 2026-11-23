@@ -195,8 +195,47 @@ t "exactly 12 characters is accepted"
 r="$(pnp '123456789012\n123456789012\n')"
 if [ "$r" = "0|123456789012" ] && ! grep -q 'at least' "$ERRF"; then ok; else bad "got $(printf '%q' "$r"), stderr: $(cat "$ERRF")"; fi
 
-t "--password is length-checked only on a fresh install (no saved password)"
-if grep -qF '[ -n "$F_PASSWORD" ] && [ -z "$SAVED_PW" ] && [ "${#F_PASSWORD}" -lt "$ADMIN_PW_MIN_LEN" ]' run.sh; then ok; else bad "fresh-install --password check missing"; fi
+echo "check_flag_password() — --password length (DUPLOAI-5693):"
+# Runs the real function from run.sh; prints its exit status and leaves stderr in $ERRF.
+cfp() { # flag_pw saved_pw
+  ( eval "$(grep '^ADMIN_PW_MIN_LEN=' run.sh; awk '/^check_flag_password\(\) \{/,/^}/' run.sh)"
+    check_flag_password "$1" "$2" ) 2>"$ERRF"; echo "$?"
+}
+
+t "a short --password with no saved password is refused"
+r="$(cfp 'Short123' '')"
+if [ "$r" = 1 ] && grep -q 'at least 12 characters' "$ERRF"; then ok; else bad "rc=$r stderr: $(cat "$ERRF")"; fi
+
+t "11 characters with no saved password is refused"
+r="$(cfp '12345678901' '')"
+if [ "$r" = 1 ]; then ok; else bad "rc=$r"; fi
+
+t "exactly 12 characters with no saved password is accepted"
+r="$(cfp '123456789012' '')"
+if [ "$r" = 0 ] && [ ! -s "$ERRF" ]; then ok; else bad "rc=$r stderr: $(cat "$ERRF")"; fi
+
+t "a short --password is accepted when a password is already saved"
+r="$(cfp 'Short123' 'Short123')"
+if [ "$r" = 0 ] && [ ! -s "$ERRF" ]; then ok; else bad "rc=$r stderr: $(cat "$ERRF")"; fi
+
+t "no --password is accepted (the prompt handles it)"
+r="$(cfp '' '')"
+if [ "$r" = 0 ]; then ok; else bad "rc=$r"; fi
+
+# The check must run before anything that tears the stack down or contacts the license server, or a
+# short password is only refused after --reset wiped the DB and the license request went out.
+CALL='check_flag_password "$F_PASSWORD" "$PF_SAVED_PW" || exit 1'
+t "run.sh calls check_flag_password with --reset counted as no saved password"
+if grep -qxF 'PF_SAVED_PW=""; [ "$RESET" = 1 ] || PF_SAVED_PW="$(getenv Authentication__LocalAdminPassword)"' run.sh \
+   && grep -qxF "$CALL" run.sh; then ok; else bad "pre-flight call missing"; fi
+
+t "the check runs before --reset's teardown and the license request"
+call_ln="$(grep -nxF "$CALL" run.sh | head -1 | cut -d: -f1)"
+reset_ln="$(grep -nxF 'if [ "$RESET" = 1 ]; then' run.sh | head -1 | cut -d: -f1)"
+lic_ln="$(grep -n 'BEGIN LICENSE BLOCK' run.sh | head -1 | cut -d: -f1)"
+if [ -n "$call_ln" ] && [ -n "$reset_ln" ] && [ -n "$lic_ln" ] \
+   && [ "$call_ln" -lt "$reset_ln" ] && [ "$call_ln" -lt "$lic_ln" ]; then ok
+else bad "call=$call_ln reset=$reset_ln license=$lic_ln"; fi
 
 echo; echo "$PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]
