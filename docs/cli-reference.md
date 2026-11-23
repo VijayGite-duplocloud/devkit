@@ -91,9 +91,11 @@ On an EC2 host the provider prompt first probes whether the instance role can ac
 16. Configures the Knowledge Base (`scripts/register-qdrant.sh`): registers the local Qdrant as a provider,
     makes it selectable from the `extension-dev` workspace, and creates the empty `devkit-docs` collection.
     Never fatal — a Knowledge Base that did not configure does not stop the platform coming up.
-17. Installs the default extensions listed in `run.sh`'s `DEVKIT_EXTENSIONS` from the extension registry
-    (`scripts/install-extensions.sh`), today the Cloud Deployment Agent. An id the registry catalog doesn't
-    list is skipped. Never fatal — an extension that did not install does not stop the platform coming up.
+17. Installs the default extensions listed by manifest id in `run.sh`'s `DEVKIT_EXTENSIONS` from the extension
+    registry (`scripts/install-extensions.sh`), today the Cloud Deployment Agent: refreshes the registry catalog,
+    installs the version the installer offers, and waits for the installer to finish (up to
+    `EXT_INSTALL_TIMEOUT`, default 300 seconds, per extension). An id the catalog doesn't list, or offers no
+    version of, is skipped. Never fatal — an extension that did not install does not stop the platform coming up.
 
 Steps 10–17 are each idempotent and skipped when already satisfied. So is step 5: a license already in
 `.env` is used as-is, and a run that was interrupted mid-verification resumes from the request id it saved.
@@ -175,7 +177,7 @@ Your `extensions/` directory is **never** touched by any of these — it is only
 | `deploy-extension.sh <path-to-extension.zip>` | Hot-load one bundle onto the platform — no restart. |
 | `deploy-all.sh` | Hot-load every built bundle. Run after `build-all.sh`. For an extension built with `DUPLO_SDK_VERSIONS`, it reads the host's SDK version and loads the one `dist/sdk-<v>/extension.zip` stamped with it, since the host loads only a bundle whose `sdkVersion` equals its own, and fails the run when no built version matches. |
 | `remove-extension.sh <extension-id>` | Unload and delete a loaded extension by its manifest id, e.g. `com.duplocloud.helloworld`. |
-| `install-extensions.sh <extension-id>[@<version>] [...]` | Install extensions from the extension registry, e.g. `com.duplocloud.demo-cloud-deployment`. Reads the registry catalog once and matches on the manifest id: an id it doesn't list, or this license doesn't cover, is skipped, as is one an admin pinned or the installer is still installing. Otherwise it installs the build the installer offers (with no offer, the newest stable published version), with `pin: false`; `@<version>` must name that same build, since the installer takes no other without a pin. A version that `/extensions/<id>/versions` already reports as current is left alone. An answer of 202 means the installer took the request and finishes in the background. A catalog whose license state isn't `ok` is an error. Exits 1 if any id failed; the others are still processed. `run.sh` calls it with `DEVKIT_EXTENSIONS`. |
+| `install-extensions.sh <manifest-id> [...]` | Install extensions from the extension registry by manifest id, e.g. `com.duplocloud.demo-cloud-deployment` — never an agent UUID or the catalog's display id. Refreshes the registry catalog (a failed refresh only warns), reads it once and matches on the manifest id: an id it doesn't list, this license doesn't cover, or the installer offers no version of is skipped, as is one an admin pinned or the installer is still installing. Otherwise it installs the build the installer's mark offers, with `pin: false` — the installer takes no other version without a pin, so there is no `@<version>`. A version that `/extensions/<id>/versions` already reports as current is left alone. The installer works in the background — 202, or 200 when a request was already pending — so the script then polls the catalog's `requests[]` until that request is `done`, or reports `failed` / `backed-out` with the installer's reason (e.g. `not-entitled`, when the license doesn't list the extension). `EXT_INSTALL_TIMEOUT` (default 300) bounds the wait per extension and `EXT_INSTALL_POLL` (default 5) sets the interval, both in seconds. A catalog whose license state isn't `ok` is an error. Exits 1 if any id failed or timed out; the others are still processed. `run.sh` calls it with `DEVKIT_EXTENSIONS`. |
 
 `build-extension.sh` refuses to build an extension whose naming is wrong — REST segments must start with
 `extensions/`, Mongo collections must be prefixed `extension_`, and template `Hello`/`hw-` identifiers must

@@ -1399,12 +1399,16 @@ esac
 
 # ── install the dev-kit's default extensions (idempotent, never fatal) ─────────
 # DUPLOAI-4813: a fresh dev kit comes up with the agents people start from already installed from the extension
-# registry. This list is the one place to add more. An entry is a manifest id, installed at the build the registry
-# offers (id@version must name that same build). Installs use pin:false, so they keep following registry updates.
-# An id the catalog doesn't list is skipped; one already current, pinned or being installed is left alone. Non-fatal, like
-# the KB step above: an extension that failed to install must never stop the platform coming up.
+# registry. This list is the one place to add more, and it drives the install: each entry is a MANIFEST id — the
+# license catalog's manifest_id, which the installer keys installs on. Never the agent's UUID (it matches no catalog
+# entry and the install fails not-entitled) and never the catalog's display id (renameable). No @version: the
+# script refreshes the catalog, installs the build the installer offers with pin:false (so it keeps following
+# registry updates), and waits for the installer to report it installed (EXT_INSTALL_TIMEOUT, default 300s).
+# An id the catalog doesn't list or offers no version of is skipped; one already current, pinned or being installed
+# is left alone. Non-fatal, like the KB step above: an extension that failed to install must never stop the
+# platform coming up.
 DEVKIT_EXTENSIONS=(
-  com.duplocloud.demo-cloud-deployment   # Cloud Deployment Agent
+  com.duplocloud.demo-cloud-deployment   # Cloud Deployment Agent (manifest id; its agent id 99104691-… is not an install key)
 )
 EXT_LINE=""
 echo "==> Installing default extensions…"
@@ -1413,7 +1417,7 @@ if [ ${#DEVKIT_EXTENSIONS[@]} -eq 0 ]; then
   echo "    (DEVKIT_EXTENSIONS is empty — nothing to install)"
 elif ./scripts/install-extensions.sh "${DEVKIT_EXTENSIONS[@]}"; then
   EXT_LINE="
-  Extension ${DEVKIT_EXTENSIONS[*]} → see the install output above"
+  Extension ${DEVKIT_EXTENSIONS[*]} → installed or skipped, see the output above"
 else
   echo "    (extension install incomplete — re-run ./scripts/install-extensions.sh ${DEVKIT_EXTENSIONS[*]})"
 fi

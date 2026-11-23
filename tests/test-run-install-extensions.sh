@@ -15,11 +15,15 @@ echo "run.sh default-extension wiring:"
 t "syntax: run.sh is syntactically valid"
 if bash -n run.sh 2>/dev/null; then ok; else bad "bash -n run.sh failed"; exit 1; fi
 
-t "list_defined: DEVKIT_EXTENSIONS holds the Cloud Deployment Agent, every entry a valid id[@version]"
+t "list_defined: DEVKIT_EXTENSIONS holds the Cloud Deployment Agent's manifest id; every entry a bare manifest id"
 DEVKIT_EXTENSIONS=()
 eval "$(awk '/^DEVKIT_EXTENSIONS=\(/,/^\)/' run.sh | tr -d '\r')"
 okids=1
-for e in "${DEVKIT_EXTENSIONS[@]}"; do [[ "$e" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*(@[A-Za-z0-9._+-]+)?$ ]] || okids=0; done
+# No @version (the installer only takes the version it offers) and never the agent UUID, which installs nothing.
+for e in "${DEVKIT_EXTENSIONS[@]}"; do
+  [[ "$e" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || okids=0
+  [[ "$e" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] && okids=0
+done
 if [ "${#DEVKIT_EXTENSIONS[@]}" -gt 0 ] && [ "$okids" = 1 ] \
    && printf '%s\n' "${DEVKIT_EXTENSIONS[@]}" | grep -qx 'com.duplocloud.demo-cloud-deployment'; then ok
 else bad "DEVKIT_EXTENSIONS=(${DEVKIT_EXTENSIONS[*]})"; fi

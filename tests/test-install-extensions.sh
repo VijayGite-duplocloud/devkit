@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# Checks scripts/install-extensions.sh (DUPLOAI-4813): reads the registry catalog once, skips ids that are not in it,
-# picks the semver-highest stable version (or the pinned id@version), skips a version /versions already reports as
-# current, and otherwise POSTs the install with pin:false — surfacing the server's reason on every failure.
+# Checks scripts/install-extensions.sh (DUPLOAI-4813): refreshes the registry catalog, reads it once, skips manifest
+# ids that are not in it (or that the installer offers no version of), takes the version from the installer's mark,
+# skips a version /versions already reports as current, otherwise POSTs the install with pin:false and polls the
+# catalog's requests[] until the installer reports the request done or failed — surfacing the server's reason on
+# every failure.
 #
 # Runs the script from a temp copy of the kit with a stub `curl` first on PATH, so it never reaches a real studio.
 # The stub serves $STUB/catalog.json, $STUB/versions-<id>.json (+ .code) and $STUB/install.body (+ install.code),
-# and logs "<METHOD> <URL> <BODY>" per call to $STUB/curl.log.
+# answers the refresh with $STUB/refresh.code (default 200), and logs "<METHOD> <URL> <BODY>" per call to
+# $STUB/curl.log. Once an install has been POSTed, every later catalog GET carries that request in requests[], its
+# state taken from the first line of $STUB/states (a line is consumed per poll while more remain; default "done")
+# and its reason from $STUB/fail.reason.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 PASS=0; FAIL=0
@@ -37,29 +42,54 @@ done
 echo "$method $url $body" >> "$STUB/curl.log"
 reply() { printf '%s\n%s' "$1" "$2"; }
 case "$url" in
+  */extension-registry/catalog/refresh)
+    reply '{}' "$(cat "$STUB/refresh.code" 2>/dev/null || echo 200)" ;;
   */extension-registry/catalog)
-    if [ -f "$STUB/catalog.json" ]; then reply "$(cat "$STUB/catalog.json")" 200; else reply oops 500; fi ;;
+    [ -f "$STUB/catalog.json" ] || { reply oops 500; exit 0; }
+    if [ -f "$STUB/posted" ]; then
+      reply "$(python3 - "$STUB" <<'PY'
+import json, os, sys
+d = sys.argv[1]
+c = json.load(open(os.path.join(d, "catalog.json")))
+req = json.load(open(os.path.join(d, "posted")))
+sf = os.path.join(d, "states")
+lines = open(sf).read().split() if os.path.exists(sf) else []
+state = lines[0] if lines else "done"
+if len(lines) > 1: open(sf, "w").write("\n".join(lines[1:]) + "\n")
+rf = os.path.join(d, "fail.reason")
+entry = {"requestId": "r1", "id": req["extensionId"], "version": req["version"], "state": state,
+         "reason": open(rf).read().strip() if os.path.exists(rf) else None}
+c["requests"] = [r for r in c.get("requests") or [] if r.get("requestId") != "r1"] + [entry]
+print(json.dumps(c))
+PY
+)" 200
+    else reply "$(cat "$STUB/catalog.json")" 200; fi ;;
   */admin/extensions/*/versions)
     id="${url%/versions}"; id="${id##*/}"
     if [ -f "$STUB/versions-$id.json" ]; then
       reply "$(cat "$STUB/versions-$id.json")" "$(cat "$STUB/versions-$id.code" 2>/dev/null || echo 200)"
     else reply '{"message":"not found"}' 404; fi ;;
   */extension-registry/install)
-    reply "$(cat "$STUB/install.body" 2>/dev/null || echo '{}')" "$(cat "$STUB/install.code" 2>/dev/null || echo 200)" ;;
+    code="$(cat "$STUB/install.code" 2>/dev/null || echo 202)"
+    case "$code" in 2*) printf '%s' "$body" > "$STUB/posted" ;; esac
+    reply "$(cat "$STUB/install.body" 2>/dev/null || echo '{"requestId":"r1","state":"accepted"}')" "$code" ;;
   *) exit 7 ;;
 esac
 SH
 chmod +x "$TMP/bin/curl"
 
-# catalog "id=v1,v2" … → $STUB/catalog.json; "id=" gives that id an empty versions array.
+# catalog "id=v1,v2" … → $STUB/catalog.json, every id licensed and marked as offering its first version;
+# "id=" gives that id no versions and no mark.
 catalog() {
   python3 - "$STUB/catalog.json" "$@" <<'PY'
 import json, sys
-exts = []
+exts, marks = [], []
 for spec in sys.argv[2:]:
     i, _, vs = spec.partition("=")
-    exts.append({"id": i, "licensed": True, "versions": [{"version": v, "name": i, "changelog": ""} for v in vs.split(",") if v]})
-json.dump({"libraryState": "ok", "extensions": exts, "marks": [], "requests": []}, open(sys.argv[1], "w"))
+    vs = [v for v in vs.split(",") if v]
+    exts.append({"id": i, "licensed": True, "versions": [{"version": v, "name": i, "changelog": ""} for v in vs]})
+    if vs: marks.append({"id": i, "version": vs[0]})
+json.dump({"libraryState": "ok", "extensions": exts, "marks": marks, "requests": []}, open(sys.argv[1], "w"))
 PY
 }
 # patch_catalog PYTHON → runs PYTHON with `c` bound to the parsed $STUB/catalog.json, then writes it back.
@@ -71,14 +101,17 @@ exec(sys.argv[2])
 json.dump(c, open(sys.argv[1], "w"))
 PY
 }
-# reset → the default fixture: X in the catalog at 1.2.0, 1.10.0, 1.9.3 (that order), nothing installed.
-reset() { rm -f "$STUB"/*; catalog "com.example.x=1.2.0,1.10.0,1.9.3"; }
+# reset → the default fixture: X in the catalog at 1.10.0, 1.9.3, 1.2.0, the installer offering 1.10.0, nothing
+# installed; an install is accepted (202) and the first poll finds it done.
+reset() { rm -f "$STUB"/*; catalog "com.example.x=1.10.0,1.9.3,1.2.0"; }
 
 # run ARGS… → runs the copy with only the fixture .env and the stub; stdout in $OUT, stderr in $ERR, exit in $RC.
+# Polls without sleeping; TIMEOUT (default 60) is the script's EXT_INSTALL_TIMEOUT.
 run() {
   : > "$STUB/curl.log"
   OUT="$(cd "$KIT" && env -u DUPLO_TARGET -u DUPLO_HOST -u DUPLO_TOKEN -u DUPLO_BASE -u DUPLO_ADMIN_TOKEN \
-    -u DUPLO_ENV_FILE PATH="$TMP/bin:$PATH" STUB="$STUB" ./scripts/install-extensions.sh "$@" 2>"$TMP/err")"
+    -u DUPLO_ENV_FILE PATH="$TMP/bin:$PATH" STUB="$STUB" EXT_INSTALL_POLL=0 EXT_INSTALL_TIMEOUT="${TIMEOUT:-60}" \
+    ./scripts/install-extensions.sh "$@" 2>"$TMP/err")"
   RC=$?
   ERR="$(cat "$TMP/err")"
 }
@@ -98,50 +131,45 @@ calls() { awk '{print $1, $2}' "$STUB/curl.log"; }
 echo "install-extensions.sh:"
 
 reset; run com.example.x
-t "picks_semver_highest: installs 1.10.0 over 1.9.3 and 1.2.0, with pin:false"
+t "offered_version_installed: installs the version the installer's mark offers, with pin:false"
 if [ "$RC" = 0 ] && [ "$(installs)" = '{"extensionId":"com.example.x","pin":false,"version":"1.10.0"}' ] \
    && has "$OUT" "    ✔ com.example.x 1.10.0 — installed"; then ok; else bad "rc=$RC installs=$(installs) out=$OUT err=$ERR"; fi
 
 t "pin_is_json_false: pin is a JSON boolean, not a string"
 if grep -q '"pin": false' "$STUB/curl.log"; then ok; else bad "$(cat "$STUB/curl.log")"; fi
 
-t "call_sequence: catalog, then versions, then install — and no catalog refresh"
-expected="GET $API/extension-registry/catalog
+t "call_sequence: refresh, catalog, versions, install, then a catalog poll"
+expected="POST $API/extension-registry/catalog/refresh
+GET $API/extension-registry/catalog
 GET $API/extensions/com.example.x/versions
-POST $API/extension-registry/install"
-if [ "$(calls)" = "$expected" ] && ! grep -q refresh "$STUB/curl.log"; then ok; else bad "$(calls)"; fi
+POST $API/extension-registry/install
+GET $API/extension-registry/catalog"
+if [ "$(calls)" = "$expected" ]; then ok; else bad "$(calls)"; fi
+
+reset; patch_catalog 'c["marks"] = [{"id": "com.example.x", "version": "1.9.3"}]'; run com.example.x
+t "mark_version_wins: installs the offered build, not the newest published"
+if [ "$RC" = 0 ] && [ "$(installed_versions)" = 1.9.3 ]; then ok; else bad "rc=$RC installs=$(installs) err=$ERR"; fi
 
 reset; catalog "com.example.x=1.0.0" "com.example.y=2.0.0"; run com.example.x com.example.y
-t "catalog_read_once: two ids, one catalog GET"
-if [ "$(grep -c '/extension-registry/catalog' "$STUB/curl.log")" = 1 ] && [ "$(installed_versions | tr '\n' ' ')" = "1.0.0 2.0.0 " ]
+t "catalog_read_once: two ids, one catalog GET before the installs"
+if [ "$(sed -n '1,/\/install /p' "$STUB/curl.log" | grep -c 'GET .*/extension-registry/catalog $')" = 1 ] \
+   && [ "$(grep -c '/catalog/refresh' "$STUB/curl.log")" = 1 ] && [ "$(installed_versions | tr '\n' ' ')" = "1.0.0 2.0.0 " ]
 then ok; else bad "$(calls)"; fi
 
+reset; echo 500 > "$STUB/refresh.code"; run com.example.x
+t "refresh_failure_warns: a failed refresh is a warning; the cached catalog is still used"
+if [ "$RC" = 0 ] && has "$ERR" "could not refresh the extension catalog: HTTP 500" && [ "$(installed_versions)" = 1.10.0 ]
+then ok; else bad "rc=$RC out=$OUT err=$ERR"; fi
+
 reset; echo '[{"version":"1.10.0","isCurrent":true}]' > "$STUB/versions-com.example.x.json"; run com.example.x
-t "current_version_skipped: no install when the chosen version is already current"
+t "current_version_skipped: no install when the offered version is already current"
 if [ "$RC" = 0 ] && ! grep -q /install "$STUB/curl.log" && has "$OUT" "    ✔ com.example.x 1.10.0 — already installed"
 then ok; else bad "rc=$RC out=$OUT log=$(calls)"; fi
 
 reset; echo '[{"version":"1.9.3","isCurrent":true},{"version":"1.2.0","isCurrent":false}]' > "$STUB/versions-com.example.x.json"
 run com.example.x
-t "older_current_upgraded: current 1.9.3 → installs 1.10.0"
+t "older_current_upgraded: current 1.9.3 → installs the offered 1.10.0"
 if [ "$RC" = 0 ] && [ "$(installed_versions)" = 1.10.0 ]; then ok; else bad "rc=$RC installs=$(installs)"; fi
-
-reset; catalog "com.example.x=2.0.0-rc.1,1.10.0"; run com.example.x
-t "stable_beats_prerelease: 1.10.0 over 2.0.0-rc.1"
-if [ "$(installed_versions)" = 1.10.0 ]; then ok; else bad "installs=$(installs) err=$ERR"; fi
-
-reset; catalog "com.example.x=2.0.0-rc.1,2.0.0-rc.10,2.0.0-rc.2"; run com.example.x
-t "prerelease_only: highest pre-release, compared numerically (rc.10 > rc.2)"
-if [ "$(installed_versions)" = 2.0.0-rc.10 ]; then ok; else bad "installs=$(installs) err=$ERR"; fi
-
-reset; run com.example.x@1.2.0
-t "pinned_version_present: id@1.2.0 installs 1.2.0, not the latest"
-if [ "$RC" = 0 ] && [ "$(installed_versions)" = 1.2.0 ]; then ok; else bad "rc=$RC installs=$(installs) err=$ERR"; fi
-
-reset; run com.example.x@9.9.9
-t "pinned_version_absent: fails, lists what is available highest first, calls nothing else"
-if [ "$RC" = 1 ] && has "$ERR" "    ✗ com.example.x@9.9.9 — version not in the catalog (available: 1.10.0, 1.9.3, 1.2.0)" \
-   && ! grep -q /versions "$STUB/curl.log" && ! grep -q /install "$STUB/curl.log"; then ok; else bad "rc=$RC err=$ERR log=$(calls)"; fi
 
 reset; run com.example.y com.example.x
 t "unknown_id_skipped: an id not in the catalog is skipped, the next id still installs, exit 0"
@@ -149,15 +177,15 @@ if [ "$RC" = 0 ] && has "$OUT" "    ↷ com.example.y — not in the extension c
    && [ "$(installed_versions)" = 1.10.0 ] && ! grep -q com.example.y "$STUB/curl.log"; then ok
 else bad "rc=$RC out=$OUT err=$ERR log=$(calls)"; fi
 
-reset; catalog "com.example.x="; run com.example.x
-t "empty_versions_skipped: a licensed id with no version and no mark is skipped"
-if [ "$RC" = 0 ] && has "$OUT" "    ↷ com.example.x — no version to install, skipped" \
+reset; patch_catalog 'c["marks"] = []'; run com.example.x
+t "no_offer_skipped: no mark means no installable version — skipped with the license hint, no fallback"
+if [ "$RC" = 0 ] && has "$OUT" "    ↷ com.example.x — the installer offers no version (does the license list it?), skipped" \
    && ! grep -q /install "$STUB/curl.log" && ! has "$OUT$ERR" Traceback; then ok; else bad "rc=$RC out=$OUT err=$ERR"; fi
 
 reset; rm -f "$STUB/catalog.json"; run com.example.x
 t "catalog_unreachable: exit 1 with the server's reason, nothing after the catalog GET"
 if [ "$RC" = 1 ] && has "$ERR" "    ✗ could not read the extension catalog: HTTP 500: oops" \
-   && [ "$(wc -l < "$STUB/curl.log" | tr -d ' ')" = 1 ]; then ok; else bad "rc=$RC err=$ERR log=$(calls)"; fi
+   && [ "$(calls | grep -vc refresh)" = 1 ]; then ok; else bad "rc=$RC err=$ERR log=$(calls)"; fi
 
 reset; echo oops > "$STUB/versions-com.example.x.json"; echo 500 > "$STUB/versions-com.example.x.code"; run com.example.x
 t "versions_http_error: a /versions 500 is an error, not a blind install"
@@ -175,17 +203,18 @@ t "install_non_json_error: a non-JSON body is shown raw, no traceback"
 if [ "$RC" = 1 ] && has "$ERR" "install failed: HTTP 502: <html>Bad Gateway</html>" && ! has "$OUT$ERR" Traceback
 then ok; else bad "rc=$RC err=$ERR"; fi
 
-reset; run '../etc' '..' com.example.x
-t "invalid_id_rejected: ids that could escape the URL path are refused and never sent"
+reset; run '../etc' '..' com.example.x@1.10.0 com.example.x
+t "invalid_id_rejected: path-escaping ids and id@version are refused and never sent"
 if [ "$RC" = 1 ] && has "$ERR" "    ✗ '../etc' — invalid extension id" && has "$ERR" "    ✗ '..' — invalid extension id" \
-   && ! grep -qE 'etc|/extensions/\.\./' "$STUB/curl.log" && [ "$(installed_versions)" = 1.10.0 ]; then ok
+   && has "$ERR" "    ✗ 'com.example.x@1.10.0' — invalid extension id" \
+   && ! grep -qE 'etc|/extensions/\.\./|@' "$STUB/curl.log" && [ "$(installed_versions)" = 1.10.0 ]; then ok
 else bad "rc=$RC err=$ERR log=$(calls)"; fi
 
 reset; run
 t "no_args_usage: exit 2 with usage on stderr"
 if [ "$RC" = 2 ] && [ "${ERR%%:*}" = Usage ]; then ok; else bad "rc=$RC err=$ERR"; fi
 
-echo "against the studio's real catalog shape (review findings):"
+echo "against the studio's real catalog shape:"
 
 # The catalog's `id` is the console's renameable display slug; the manifest id the installer keys on is `manifestId`.
 reset; patch_catalog 'c["extensions"][0].update(id="cloud-deploy", manifestId="com.example.x")'; run com.example.x
@@ -197,26 +226,16 @@ else bad "rc=$RC out=$OUT err=$ERR"; fi
 reset; echo '{"libraryState":"missing","extensions":[],"marks":[],"requests":[]}' > "$STUB/catalog.json"; run com.example.x
 t "library_state_not_ok: an unusable catalog is an error, not a quiet skip"
 if [ "$RC" = 1 ] && has "$ERR" '    ✗ could not read the extension catalog: library state "missing" (no license is configured)' \
-   && [ "$(wc -l < "$STUB/curl.log" | tr -d ' ')" = 1 ]; then ok; else bad "rc=$RC out=$OUT err=$ERR"; fi
+   && [ "$(calls | grep -vc refresh)" = 1 ]; then ok; else bad "rc=$RC out=$OUT err=$ERR"; fi
 
-reset; patch_catalog 'c["extensions"][0].update(licensed=False, versions=[])'; run com.example.x
+reset; patch_catalog 'c["extensions"][0].update(licensed=False, versions=[]); c["marks"] = []'; run com.example.x
 t "unlicensed_skipped: a row this license doesn't cover says so"
 if [ "$RC" = 0 ] && has "$OUT" "    ↷ com.example.x — not licensed for this install, skipped" && ! grep -q /install "$STUB/curl.log"
 then ok; else bad "rc=$RC out=$OUT err=$ERR"; fi
 
-# Without a pin the installer only takes the version its mark offers.
-reset; patch_catalog 'c["marks"] = [{"id": "com.example.x", "version": "1.9.3"}]'; run com.example.x
-t "mark_version_wins: installs the build the installer's mark offers, not the newest published"
-if [ "$RC" = 0 ] && [ "$(installed_versions)" = 1.9.3 ]; then ok; else bad "rc=$RC installs=$(installs) err=$ERR"; fi
-
 reset; patch_catalog 'c["marks"] = [{"id": "com.example.x", "version": None, "reason": "sdk-mismatch"}]'; run com.example.x
 t "mark_blocked: a mark with a reason and no version is reported, nothing sent"
 if [ "$RC" = 1 ] && has "$ERR" "    ✗ com.example.x — the installer can't install it here: sdk-mismatch" \
-   && ! grep -q /install "$STUB/curl.log"; then ok; else bad "rc=$RC out=$OUT err=$ERR"; fi
-
-reset; patch_catalog 'c["marks"] = [{"id": "com.example.x", "version": "1.10.0"}]'; run com.example.x@1.2.0
-t "pinned_arg_not_offered: id@version other than the offered build fails clearly instead of a 409"
-if [ "$RC" = 1 ] && has "$ERR" "    ✗ com.example.x@1.2.0 — the registry offers 1.10.0; installing another version needs a pin" \
    && ! grep -q /install "$STUB/curl.log"; then ok; else bad "rc=$RC out=$OUT err=$ERR"; fi
 
 # An unpinned install clears a pin, and a rollback always pins — so a re-run must not undo either.
@@ -225,7 +244,7 @@ t "pinned_left_alone: an extension an admin pinned or rolled back is not re-inst
 if [ "$RC" = 0 ] && has "$OUT" "    ↷ com.example.x — pinned at 1.9.3, left alone" && ! grep -q /install "$STUB/curl.log"
 then ok; else bad "rc=$RC out=$OUT err=$ERR log=$(calls)"; fi
 
-reset; patch_catalog 'c["requests"] = [{"requestId": "r1", "id": "com.example.x", "version": "1.10.0", "state": "downloading"}]'
+reset; patch_catalog 'c["requests"] = [{"requestId": "r9", "id": "com.example.x", "version": "1.10.0", "state": "downloading"}]'
 run com.example.x
 t "in_progress_skipped: an install the installer is still working on is not requested again"
 if [ "$RC" = 0 ] && has "$OUT" "    ↷ com.example.x — an install is already in progress (downloading)" \
@@ -236,16 +255,48 @@ run com.example.x
 t "finished_request_ignored: a failed earlier request doesn't block a new one"
 if [ "$RC" = 0 ] && [ "$(installed_versions)" = 1.10.0 ]; then ok; else bad "rc=$RC out=$OUT err=$ERR"; fi
 
-reset; echo 202 > "$STUB/install.code"; echo '{"requestId":"r1","state":"accepted"}' > "$STUB/install.body"; run com.example.x
-t "install_202_requested: an accepted install is reported as requested, not as installed"
-if [ "$RC" = 0 ] && has "$OUT" "    ✔ com.example.x 1.10.0 — install requested (HTTP 202)" && ! has "$OUT" "— installed"
-then ok; else bad "rc=$RC out=$OUT err=$ERR"; fi
-
 reset; echo 409 > "$STUB/install.code"; echo '{"reason":"version-not-offered","offeredVersion":"1.9.3"}' > "$STUB/install.body"
 run com.example.x
 t "installer_reason_shown: an installer refusal shows its reason slug, not raw JSON"
 if [ "$RC" = 1 ] && grep -qxF "    ✗ com.example.x 1.10.0 — install failed: HTTP 409: version-not-offered" <<<"$ERR"
 then ok; else bad "rc=$RC err=$ERR"; fi
+
+echo "post-install: waiting for the installer:"
+
+reset; printf 'accepted\ndownloading\ninstalling\ndone\n' > "$STUB/states"; run com.example.x
+t "install_202_polled_to_done: an accepted install is polled through its states until done"
+if [ "$RC" = 0 ] && has "$OUT" "    … com.example.x 1.10.0 — install requested (HTTP 202), waiting for the installer" \
+   && has "$OUT" "    ✔ com.example.x 1.10.0 — installed" \
+   && [ "$(sed -n '/\/install /,$p' "$STUB/curl.log" | grep -c 'GET .*/extension-registry/catalog $')" = 4 ]
+then ok; else bad "rc=$RC out=$OUT err=$ERR log=$(calls)"; fi
+
+# 200 means the installer already holds a pending request for it — not that it is installed.
+reset; echo 200 > "$STUB/install.code"; echo '{"requestId":"r1","state":"downloading"}' > "$STUB/install.body"
+printf 'downloading\ndone\n' > "$STUB/states"; run com.example.x
+t "install_200_is_pending: a 200 is polled like a 202, not reported as installed straight away"
+if [ "$RC" = 0 ] && has "$OUT" "install requested (HTTP 200), waiting for the installer" \
+   && has "$OUT" "    ✔ com.example.x 1.10.0 — installed" \
+   && [ "$(sed -n '/\/install /,$p' "$STUB/curl.log" | grep -c 'GET .*/extension-registry/catalog $')" = 2 ]
+then ok; else bad "rc=$RC out=$OUT err=$ERR log=$(calls)"; fi
+
+reset; printf 'downloading\nfailed\n' > "$STUB/states"; echo not-entitled > "$STUB/fail.reason"; run com.example.x
+t "install_failed_reason: a request that ends failed is an error with the installer's reason"
+if [ "$RC" = 1 ] && has "$ERR" "    ✗ com.example.x 1.10.0 — install failed: failed (not-entitled)" && ! has "$OUT" "— installed"
+then ok; else bad "rc=$RC out=$OUT err=$ERR"; fi
+
+reset; echo backed-out > "$STUB/states"; run com.example.x
+t "install_backed_out: a backed-out install is an error"
+if [ "$RC" = 1 ] && has "$ERR" "    ✗ com.example.x 1.10.0 — install failed: backed-out"; then ok; else bad "rc=$RC out=$OUT err=$ERR"; fi
+
+reset; echo downloading > "$STUB/states"; TIMEOUT=0 run com.example.x
+t "install_timeout: still running when the wait ends → error naming the last state and the timeout"
+if [ "$RC" = 1 ] && has "$ERR" "    ✗ com.example.x 1.10.0 — still downloading after 0s (EXT_INSTALL_TIMEOUT); check the Extension Library page"
+then ok; else bad "rc=$RC out=$OUT err=$ERR"; fi
+
+# Without a requestId in the reply, the request is found by id and version.
+reset; echo '{"state":"accepted"}' > "$STUB/install.body"; run com.example.x
+t "poll_without_request_id: the request is matched on id and version"
+if [ "$RC" = 0 ] && has "$OUT" "    ✔ com.example.x 1.10.0 — installed"; then ok; else bad "rc=$RC out=$OUT err=$ERR"; fi
 
 echo
 echo "$PASS passed, $FAIL failed"
