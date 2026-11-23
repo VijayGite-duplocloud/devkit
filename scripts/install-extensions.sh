@@ -12,17 +12,19 @@
 #
 # Flow (DUPLOAI-4813, per the ticket's trace of backend → installer):
 #   1. POST …/extension-registry/catalog/refresh, so the installer's catalog isn't stale right after a new license.
-#      A failed refresh is a warning: the cached catalog is still read.
-#   2. GET …/extension-registry/catalog, once. Per id:
+#      It answers with the whole catalog document, which is used as-is: one call, no separate GET. Only a failed
+#      refresh is a warning followed by GET …/extension-registry/catalog (the cached one).
+#   2. Per id, from that one catalog:
 #        - not in the catalog, or not licensed for this install → skipped (not an error)
 #        - pinned by an admin (a pin, or a rollback, which always pins) → left alone: an unpinned install clears it
 #        - an install request the installer is still working on → left alone, not requested twice
 #        - the version is the one the installer's mark offers: without a pin it accepts no other (409
 #          version-not-offered). No offered version → skipped, since the license most likely doesn't list it.
-#   3. GET …/extensions/{id}/versions: already current → nothing to do.
-#   4. POST …/extension-registry/install {"extensionId","version","pin":false}. The installer works in the
+#        - the row's installedVersion already is that version → nothing to do. That is the extension's current
+#          loaded version, so a separate GET …/extensions/{id}/versions would only repeat it.
+#   3. POST …/extension-registry/install {"extensionId","version","pin":false}. The installer works in the
 #      background: 202 (accepted) or 200 (a request was already pending) both carry a requestId and state.
-#   5. Poll the catalog's requests[] for that request until it is done (installed), failed or backed-out (an
+#   4. Poll the catalog's requests[] for that request until it is done (installed), failed or backed-out (an
 #      error, with the installer's reason — e.g. not-entitled when the license doesn't list it), or until
 #      EXT_INSTALL_TIMEOUT seconds (default 300) pass, checking every EXT_INSTALL_POLL seconds (default 5).
 #
@@ -82,14 +84,18 @@ for arg in "$@"; do
 done
 [ ${#IDS[@]} -gt 0 ] || exit 1
 
-# ── refresh, then read the registry catalog once ────────────────────────────────────────────────
+# ── the registry catalog: refreshed, read once ──────────────────────────────────────────────────
+# The refresh answers with the whole catalog document (versions, marks, requests, installed state), so its reply is
+# the catalog. Only a failed refresh falls back to a GET of the cached one.
 REPLY_="$(api POST "$ADMIN/extension-registry/catalog/refresh")"; CODE="$(status_of "$REPLY_")"
-[[ "$CODE" == 2* ]] || echo "    ! could not refresh the extension catalog: HTTP $CODE: $(err_msg "$(body_of "$REPLY_")") — using the cached one" >&2
+if [[ "$CODE" != 2* ]]; then
+  echo "    ! could not refresh the extension catalog: HTTP $CODE: $(err_msg "$(body_of "$REPLY_")") — using the cached one" >&2
+  REPLY_="$(api GET "$ADMIN/extension-registry/catalog")"; CODE="$(status_of "$REPLY_")"
+fi
+CATALOG="$(body_of "$REPLY_")"
 
 # A license problem still answers 200, with libraryState saying which and no extensions: that must read as an
 # error, never as "every id is missing".
-REPLY_="$(api GET "$ADMIN/extension-registry/catalog")"
-CODE="$(status_of "$REPLY_")"; CATALOG="$(body_of "$REPLY_")"
 STATE="bad"
 [[ "$CODE" != 2* ]] || STATE="$(printf '%s' "$CATALOG" | python3 -c '
 import sys, json
@@ -110,8 +116,9 @@ case "$STATE" in
     echo "    ✗ could not read the extension catalog: library state \"$STATE\" ($why)" >&2; exit 1 ;;
 esac
 
-# plan_install ID → one line from $CATALOG: "ok <version>" | "missing" | "unlicensed" | "pinned <version>" |
-# "busy <state>" | "blocked <reason>" | "nooffer".
+# plan_install ID → one line from $CATALOG: "ok <version>" | "current <version>" | "missing" | "unlicensed" |
+# "pinned <version>" | "busy <state>" | "blocked <reason>" | "nooffer". "current": the row's installedVersion — the
+# extension's current loaded version, the same one /extensions/{id}/versions flags isCurrent — is the offered one.
 plan_install() {
   printf '%s' "$CATALOG" | ID="$1" python3 -c '
 import sys, json, os
@@ -124,20 +131,11 @@ if ext is None: out = "missing"
 elif ext.get("licensed") is False: out = "unlicensed"
 elif mark.get("pinnedVersion"): out = "pinned " + mark["pinnedVersion"]
 elif busy: out = "busy " + (busy.get("state") or "pending")
-elif mark.get("version"): out = "ok " + mark["version"]
+elif mark.get("version"):
+    out = ("current " if ext.get("installed") and ext.get("installedVersion") == mark["version"] else "ok ") + mark["version"]
 elif mark.get("reason"): out = "blocked " + mark["reason"]
 else: out = "nooffer"
 print(out)'
-}
-
-# is_current BODY VERSION → rc 0 when the /versions reply marks VERSION as the current one.
-is_current() {
-  printf '%s' "$1" | V="$2" python3 -c '
-import sys, json, os
-try: d = json.load(sys.stdin)
-except Exception: d = []
-cur = any(isinstance(e, dict) and e.get("isCurrent") and e.get("version") == os.environ["V"] for e in (d if isinstance(d, list) else []))
-raise SystemExit(0 if cur else 1)'
 }
 
 # request_id BODY → the requestId an install reply carries, or nothing.
@@ -196,6 +194,7 @@ for id in "${IDS[@]}"; do
   pick="$(plan_install "$id")" || pick=""
   case "$pick" in
     "ok "?*)     ver="${pick#ok }" ;;
+    "current "*) echo "    ✔ $id ${pick#current } — already installed"; continue ;;
     missing)     echo "    ↷ $id — not in the extension catalog, skipped"; continue ;;
     unlicensed)  echo "    ↷ $id — not licensed for this install, skipped"; continue ;;
     nooffer)     echo "    ↷ $id — the installer offers no version (does the license list it?), skipped"; continue ;;
@@ -204,13 +203,6 @@ for id in "${IDS[@]}"; do
     "blocked "*) echo "    ✗ $id — the installer can't install it here: ${pick#blocked }" >&2; FAILED=1; continue ;;
     *)           echo "    ✗ $id — could not read its catalog entry" >&2; FAILED=1; continue ;;
   esac
-
-  REPLY_="$(api GET "$ADMIN/extensions/$id/versions")"; CODE="$(status_of "$REPLY_")"; BODY="$(body_of "$REPLY_")"
-  if [[ "$CODE" == 2* ]] && is_current "$BODY" "$ver"; then
-    echo "    ✔ $id $ver — already installed"; continue
-  elif [[ "$CODE" != 2* && "$CODE" != 404 ]]; then
-    echo "    ✗ $id — could not read installed versions: HTTP $CODE: $(err_msg "$BODY")" >&2; FAILED=1; continue
-  fi
 
   REQ="$(ID="$id" V="$ver" python3 -c 'import json,os;print(json.dumps({"extensionId":os.environ["ID"],"version":os.environ["V"],"pin":False}))')"
   REPLY_="$(api POST "$ADMIN/extension-registry/install" "$REQ")"; CODE="$(status_of "$REPLY_")"
