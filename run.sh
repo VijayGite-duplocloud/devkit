@@ -1280,7 +1280,7 @@ if [ -z "$TOK" ] || ! token_ok "$TOK"; then
            echo "  Check \`${RUNTIME:-docker} compose logs studio\`, then re-run ./run.sh." >&2 ;;
       *)   echo "Login failed for $EMAIL (HTTP $LOGIN_CODE) — check the admin email/password (./run.sh --reset to re-enter)." >&2
            case "$LOGIN_BODY" in *mustChangePassword*)
-             echo "  The portal wants this password changed: it must be at least $ADMIN_PW_MIN_LEN characters." >&2 ;; esac ;;
+             echo "  The portal wants this password changed: it does not meet the portal password policy." >&2 ;; esac ;;
     esac
     exit 1
   fi
