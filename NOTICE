@@ -61,11 +61,9 @@ THAT LIST IS ILLUSTRATIVE, NOT EXHAUSTIVE. IT COVERS ANY REGISTRY AND ANY IMAGE
 ADDED TO THE DEV KIT LATER. THESE IMAGES ARE LICENSED SEPARATELY PURSUANT TO THE
 TERMS AND CONDITIONS IN TERMS.
 
-THESE IMAGES ARE PROVIDED FOR LOCAL DEVELOPMENT AND EVALUATION ONLY. THEY MAY NOT
-BE MODIFIED, REVERSE ENGINEERED, REPACKAGED, OR REDISTRIBUTED, AND THEY MAY NOT BE
-USED IN PRODUCTION.
+THESE IMAGES MAY NOT BE MODIFIED, REVERSE ENGINEERED, REPACKAGED, OR REDISTRIBUTED.
 
-For a production license, contact sales@duplocloud.net.
+For Pro or Enterprise licensing, contact sales@duplocloud.net.
 
 ================================================================================
 THIRD-PARTY IMAGES
@@ -82,4 +80,4 @@ YOUR EXTENSIONS
 ================================================================================
 
 Extensions you author under extensions/ are yours. DuploCloud claims no ownership
-of and no license to them. See Section 6 of TERMS.md.
+of and no license to them. See Section A5.2 of the Terms (linked from TERMS.md).
