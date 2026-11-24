@@ -6,7 +6,7 @@
 # By default the build fetches the host SDK feed from DUPLO_HOST (so it must be reachable from CI — a public
 # DuploCloud, not localhost). Set the repo variable DUPLO_SDK_VERSIONS (one version per line) to build
 # against those SDK versions from the package feed instead, with no host needed to build; the bundles land at
-# dist/sdk-<v>/extension.zip. Deploy (hot-load) still needs DUPLO_HOST, and runs on push to main and on a manual run
+# dist/sdk-<v>/agent.zip. Deploy (hot-load) still needs DUPLO_HOST, and runs on push to main and on a manual run
 # with deploy=true: scripts/deploy-all.sh loads the one bundle whose sdkVersion equals the host's, and fails when the
 # list has none for it. PRs build only.
 #
