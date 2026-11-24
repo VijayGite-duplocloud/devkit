@@ -1,6 +1,10 @@
-# Toolchain image for building dev-kit extensions: .NET SDK 10 + Node 22 plus the shell tools
+# Toolchain image for building dev-kit extensions: .NET SDK 10 + the .NET 8 runtime + Node 22 plus the shell tools
 # scripts/build-extension.sh needs. The SDK builds net8.0 as well as net10.0, and the script picks the target
-# framework from the host SDK version, so one toolchain serves hosts on either runtime.
+# framework from the host SDK version, so one toolchain serves hosts on either runtime. The .NET 8 shared runtime
+# is there for the ArmDot step, which runs on the built assembly and needs the runtime that assembly targets: without
+# it a release that lists a 1.0.x or 1.1.x SDK version builds its net8.0 bundle and then fails to obfuscate it with
+# "Failed to find a .NET Core runtime v8.0". It is copied from Microsoft's 8.0 runtime image, pinned by digest, the way
+# Node is copied below; the SDK image's own 10.0 runtime stays beside it.
 #
 # Node 22 tracks the frontend, it is not a preference. The samples are Angular 22, whose declared engines
 # are "^22.22.3 || ^24.15.0 || >=26.0.0" — so the 22.x line satisfies Angular only from 22.22.3 up. The
@@ -15,8 +19,12 @@
 # keeps the image multi-arch (amd64 for CI, arm64 for Apple Silicon laptops) without trusting an extra
 # package source. Both tags float, so this is not a reproducible build; pinning is a separate concern.
 FROM node:22-bookworm-slim AS node
+# mcr.microsoft.com/dotnet/aspnet:8.0-noble, 8.0.34 runtimes (docker buildx imagetools inspect), multi-arch.
+FROM mcr.microsoft.com/dotnet/aspnet:8.0-noble@sha256:fb50a3d0efad014b4fa8ee85fa498818172e38216cc73742821319f9db827bb2 AS net8
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0-noble
+COPY --from=net8 /usr/share/dotnet/shared/Microsoft.NETCore.App /usr/share/dotnet/shared/Microsoft.NETCore.App
+COPY --from=net8 /usr/share/dotnet/shared/Microsoft.AspNetCore.App /usr/share/dotnet/shared/Microsoft.AspNetCore.App
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
