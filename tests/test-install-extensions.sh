@@ -48,6 +48,14 @@ case "$url" in
       case "$rc" in 2*) ;; *) reply '{"message":"refresh failed"}' "$rc"; exit 0 ;; esac ;;
     esac
     [ -f "$STUB/catalog.json" ] || { reply oops 500; exit 0; }
+    # $STUB/unsettled N → the next N catalog reads come from an installer whose last pass failed: no marks yet.
+    if [ -f "$STUB/unsettled" ] && n="$(cat "$STUB/unsettled")" && [ "$n" -gt 0 ]; then
+      echo $((n - 1)) > "$STUB/unsettled"
+      reply "$(python3 -c 'import json, sys
+c = json.load(open(sys.argv[1])); c["marks"] = []
+c["installer"] = {"ready": True, "lastPassAt": "2026-11-24T16:43:30Z", "outcome": "error", "reason": "backend-call-failed"}
+print(json.dumps(c))' "$STUB/catalog.json")" 200; exit 0
+    fi
     if [ -f "$STUB/posted" ]; then
       reply "$(python3 - "$STUB" <<'PY'
 import json, os, sys
@@ -108,6 +116,7 @@ run() {
   : > "$STUB/curl.log"
   OUT="$(cd "$KIT" && env -u DUPLO_TARGET -u DUPLO_HOST -u DUPLO_TOKEN -u DUPLO_BASE -u DUPLO_ADMIN_TOKEN \
     -u DUPLO_ENV_FILE PATH="$TMP/bin:$PATH" STUB="$STUB" EXT_INSTALL_POLL=0 EXT_INSTALL_TIMEOUT="${TIMEOUT:-60}" \
+    EXT_CATALOG_WAIT="${CWAIT:-60}" \
     ./scripts/install-extensions.sh "$@" 2>"$TMP/err")"
   RC=$?
   ERR="$(cat "$TMP/err")"
@@ -253,6 +262,36 @@ run com.example.x
 t "installer_reason_shown: an installer refusal shows its reason slug, not raw JSON"
 if [ "$RC" = 1 ] && grep -qxF "    ✗ com.example.x 1.10.0 — install failed: HTTP 409: version-not-offered" <<<"$ERR"
 then ok; else bad "rc=$RC err=$ERR"; fi
+
+echo "pre-install: waiting for the installer's first good pass:"
+
+# Fresh `docker compose up`: the installer's first pass fails (studio not up yet) and marks[] is empty until it retries.
+reset; echo 3 > "$STUB/unsettled"; run com.example.x
+t "installer_unsettled_waited: a failed last pass is waited out, then the offered version installs"
+if [ "$RC" = 0 ] && has "$OUT" "    … the installer has no offers yet (last pass failed: backend-call-failed) — waiting up to 60s (EXT_CATALOG_WAIT)" \
+   && has "$OUT" "    ✔ the installer is ready" && [ "$(installed_versions)" = 1.10.0 ] \
+   && [ "$(sed -n '1,/\/install /p' "$STUB/curl.log" | grep -c 'GET .*/extension-registry/catalog $')" = 3 ]
+then ok; else bad "rc=$RC out=$OUT err=$ERR log=$(calls)"; fi
+
+reset; echo 999 > "$STUB/unsettled"; CWAIT=0 run com.example.x
+t "installer_never_settles: no offers by EXT_CATALOG_WAIT is an error naming the installer, not the license"
+if [ "$RC" = 1 ] && has "$ERR" "    ! the installer still has no offers after 0s (last pass failed: backend-call-failed)" \
+   && has "$ERR" "    ✗ com.example.x — the installer has made no offers yet (last pass failed: backend-call-failed); re-run" \
+   && ! has "$OUT$ERR" "does the license list it" && ! grep -q /install "$STUB/curl.log"
+then ok; else bad "rc=$RC out=$OUT err=$ERR log=$(calls)"; fi
+
+reset; patch_catalog 'c["installer"] = {"ready": True, "lastPassAt": "2026-11-24T16:44:28Z", "outcome": "skipped"}; c["marks"] = []'
+run com.example.x
+t "installer_settled_no_wait: a good last pass with no mark is the plain license skip, with no extra catalog reads"
+if [ "$RC" = 0 ] && has "$OUT" "    ↷ com.example.x — the installer offers no version (does the license list it?), skipped" \
+   && ! has "$OUT" "waiting up to" && [ "$(calls)" = "POST $API/extension-registry/catalog/refresh" ]
+then ok; else bad "rc=$RC out=$OUT err=$ERR log=$(calls)"; fi
+
+reset; patch_catalog 'c["installer"] = {"ready": False}; c["marks"] = []'; CWAIT=0 run com.example.x
+t "installer_not_ready: an installer reporting ready:false is waited for too"
+if [ "$RC" = 1 ] && has "$OUT" "the installer has no offers yet (not ready)" \
+   && has "$ERR" "    ✗ com.example.x — the installer has made no offers yet (not ready); re-run"
+then ok; else bad "rc=$RC out=$OUT err=$ERR"; fi
 
 echo "post-install: waiting for the installer:"
 

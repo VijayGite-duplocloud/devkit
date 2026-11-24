@@ -15,12 +15,16 @@
 #   1. POST …/extension-registry/catalog/refresh, so the installer's catalog isn't stale right after a new license.
 #      It answers with the whole catalog document, which is used as-is: one call, no separate GET. Only a failed
 #      refresh is a warning followed by GET …/extension-registry/catalog (the cached one).
+#      If the catalog's installer block says the installer hasn't completed a good pass yet (not ready, no pass, or
+#      a failed last pass — e.g. backend-call-failed right after startup), marks[] is not to be trusted: the catalog
+#      is re-read every EXT_INSTALL_POLL seconds for up to EXT_CATALOG_WAIT seconds (default 120) until it has.
 #   2. Per id, from that one catalog:
 #        - not in the catalog, or not licensed for this install → skipped (not an error)
 #        - pinned by an admin (a pin, or a rollback, which always pins) → left alone: an unpinned install clears it
 #        - an install request the installer is still working on → left alone, not requested twice
 #        - the version is the one the installer's mark offers: without a pin it accepts no other (409
-#          version-not-offered). No offered version → skipped, since the license most likely doesn't list it.
+#          version-not-offered). No offered version → skipped, since the license most likely doesn't list it —
+#          unless the installer never completed a good pass within EXT_CATALOG_WAIT: then it is an error (re-run).
 #        - the row's installedVersion already is that version → nothing to do. That is the extension's current
 #          loaded version, so a separate GET …/extensions/{id}/versions would only repeat it.
 #   3. POST …/extension-registry/install {"extensionId","version","pin":false}. The installer works in the
@@ -34,7 +38,8 @@
 #
 # Usage: ./scripts/install-extensions.sh <manifest-id> [...]
 # Exit:  0 every id installed, already current, or skipped
-#        1 at least one id failed or timed out, no token, or the catalog could not be read
+#        1 at least one id failed or timed out, no token, the catalog could not be read, or the installer made no
+#          offers within EXT_CATALOG_WAIT
 #        2 usage
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -46,6 +51,7 @@ source "$(dirname "$0")/_target.sh"   # → BASE_URL + TOKEN from .env per DUPLO
 ADMIN="$BASE_URL/v1/aiservicedesk/admin"
 TIMEOUT="${EXT_INSTALL_TIMEOUT:-300}"; [[ "$TIMEOUT" =~ ^[0-9]+$ ]] || TIMEOUT=300
 POLL="${EXT_INSTALL_POLL:-5}";        [[ "$POLL" =~ ^[0-9]+$ ]] || POLL=5
+CATALOG_WAIT="${EXT_CATALOG_WAIT:-120}"; [[ "$CATALOG_WAIT" =~ ^[0-9]+$ ]] || CATALOG_WAIT=120
 
 # api METHOD URL [BODY] → the response body, then a last line holding the HTTP status (000: no response at all).
 # Never curl -f: on a 4xx/5xx the body is the only place the studio says why (see scripts/_studio_api.sh).
@@ -116,6 +122,44 @@ case "$STATE" in
     esac
     echo "    ✗ could not read the extension catalog: library state \"$STATE\" ($why)" >&2; exit 1 ;;
 esac
+
+# ── wait for the installer's first good pass ────────────────────────────────────────────────────
+# The installer's marks (the versions it offers) come from its own pass over the catalog, not from the refresh. Right
+# after `docker compose up` it starts with the studio, its first pass can fail (backend-call-failed: the studio is not
+# answering yet) and it retries about a minute later — until then marks[] is empty and every id would read "offers no
+# version". So while the catalog's installer block says not ready, no pass yet, or a failed last pass, re-read the
+# catalog every EXT_INSTALL_POLL seconds for up to EXT_CATALOG_WAIT. A catalog without an installer block (older
+# studio) is taken as is. Still unsettled at the deadline → carry on, and an id with no offer is then an error.
+# installer_state CATALOG → "settled" | "<why it isn't>"
+installer_state() {
+  printf '%s' "$1" | python3 -c '
+import sys, json
+try: d = json.load(sys.stdin)
+except Exception: d = None
+i = d.get("installer") if isinstance(d, dict) else None
+if not isinstance(d, dict) or not isinstance(d.get("extensions"), list): print("catalog unreadable")
+elif not isinstance(i, dict): print("settled")
+elif i.get("ready") is False: print("not ready")
+elif not i.get("lastPassAt"): print("no pass yet")
+elif i.get("outcome") == "error": print("last pass failed" + (": " + str(i["reason"]) if i.get("reason") else ""))
+else: print("settled")' 2>/dev/null || echo "catalog unreadable"
+}
+INSTALLER="$(installer_state "$CATALOG")"
+if [ "$INSTALLER" != settled ]; then
+  echo "    … the installer has no offers yet ($INSTALLER) — waiting up to ${CATALOG_WAIT}s (EXT_CATALOG_WAIT)"
+  deadline=$((SECONDS + CATALOG_WAIT))
+  while [ "$INSTALLER" != settled ] && [ "$SECONDS" -lt "$deadline" ]; do
+    sleep "$POLL"
+    got="$(api GET "$ADMIN/extension-registry/catalog")"
+    [[ "$(status_of "$got")" == 2* ]] || continue
+    st="$(installer_state "$(body_of "$got")")"
+    [ "$st" = "catalog unreadable" ] && continue
+    CATALOG="$(body_of "$got")"; INSTALLER="$st"
+  done
+  if [ "$INSTALLER" = settled ]; then echo "    ✔ the installer is ready"
+  else echo "    ! the installer still has no offers after ${CATALOG_WAIT}s ($INSTALLER)" >&2
+  fi
+fi
 
 # plan_install ID → one line from $CATALOG: "ok <version>" | "current <version>" | "missing" | "unlicensed" |
 # "pinned <version>" | "busy <state>" | "blocked <reason>" | "nooffer". "current": the row's installedVersion — the
@@ -198,7 +242,12 @@ for id in "${IDS[@]}"; do
     "current "*) echo "    ✔ $id ${pick#current } — already installed"; continue ;;
     missing)     echo "    ↷ $id — not in the extension catalog, skipped"; continue ;;
     unlicensed)  echo "    ↷ $id — not licensed for this install, skipped"; continue ;;
-    nooffer)     echo "    ↷ $id — the installer offers no version (does the license list it?), skipped"; continue ;;
+    nooffer)
+      if [ "$INSTALLER" != settled ]; then   # not the license: the installer hasn't made any offers yet
+        echo "    ✗ $id — the installer has made no offers yet ($INSTALLER); re-run $0 $id" >&2; FAILED=1
+      else echo "    ↷ $id — the installer offers no version (does the license list it?), skipped"
+      fi
+      continue ;;
     "pinned "*)  echo "    ↷ $id — pinned at ${pick#pinned }, left alone"; continue ;;
     "busy "*)    echo "    ↷ $id — an install is already in progress (${pick#busy })"; continue ;;
     "blocked "*) echo "    ✗ $id — the installer can't install it here: ${pick#blocked }" >&2; FAILED=1; continue ;;
