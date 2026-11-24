@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Install extensions from the studio's extension registry by manifest id (e.g. com.duplocloud.demo-cloud-deployment).
+# Install extensions from the studio's extension registry by manifest id (e.g. com.duplocloud.cloud-setup).
 #
-# WHY: a fresh dev kit should come up with the agents people start from (DUPLOAI-4813: the Cloud Deployment
-# Agent first) already installed, rather than leaving every developer to find them in the registry by hand.
+# WHY: a fresh dev kit should come up with the agents people start from (DUPLOAI-4813: Cloud Setup, the agent the
+# ticket calls the Cloud Deployment Agent, first) already installed, rather than leaving every developer to find them
+# in the registry by hand.
 # run.sh calls this with its DEVKIT_EXTENSIONS list; it also works on its own, against a local or remote target.
 #
 # Each argument is a MANIFEST id — the license catalog's manifest_id, which the installer keys every catalog entry

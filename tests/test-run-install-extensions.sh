@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Checks run.sh installs its default extensions (DUPLOAI-4813): DEVKIT_EXTENSIONS holds the Cloud Deployment Agent,
+# Checks run.sh installs its default extensions (DUPLOAI-4813): DEVKIT_EXTENSIONS holds Cloud Setup (the ticket's Cloud Deployment Agent),
 # scripts/install-extensions.sh is called with it after the Knowledge Base step and before the portal step, a failure
 # can't stop run.sh, and the "Platform ready" banner reports it.
 # Static checks only — nothing here starts the stack or touches .env.
@@ -15,7 +15,7 @@ echo "run.sh default-extension wiring:"
 t "syntax: run.sh is syntactically valid"
 if bash -n run.sh 2>/dev/null; then ok; else bad "bash -n run.sh failed"; exit 1; fi
 
-t "list_defined: DEVKIT_EXTENSIONS holds the Cloud Deployment Agent's manifest id; every entry a bare manifest id"
+t "list_defined: DEVKIT_EXTENSIONS holds Cloud Setup's manifest id (com.duplocloud.cloud-setup); every entry a bare manifest id"
 DEVKIT_EXTENSIONS=()
 eval "$(awk '/^DEVKIT_EXTENSIONS=\(/,/^\)/' run.sh | tr -d '\r')"
 okids=1
@@ -25,7 +25,7 @@ for e in "${DEVKIT_EXTENSIONS[@]}"; do
   [[ "$e" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] && okids=0
 done
 if [ "${#DEVKIT_EXTENSIONS[@]}" -gt 0 ] && [ "$okids" = 1 ] \
-   && printf '%s\n' "${DEVKIT_EXTENSIONS[@]}" | grep -qx 'com.duplocloud.demo-cloud-deployment'; then ok
+   && printf '%s\n' "${DEVKIT_EXTENSIONS[@]}" | grep -qx 'com.duplocloud.cloud-setup'; then ok
 else bad "DEVKIT_EXTENSIONS=(${DEVKIT_EXTENSIONS[*]})"; fi
 
 t "call_is_non_fatal: the install runs as an if/elif-condition, so set -e can't stop run.sh"

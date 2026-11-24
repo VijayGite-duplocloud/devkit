@@ -111,7 +111,7 @@ the `extension-dev` workspace: a permission set granting it, a permission-set gr
 and the workspace itself. Without them, login lands on `/app/auth/no-tenant-access`.
 
 `run.sh` also installs a default set of extensions from the extension registry, listed in its
-`DEVKIT_EXTENSIONS` array (today the Cloud Deployment Agent, `com.duplocloud.demo-cloud-deployment`).
+`DEVKIT_EXTENSIONS` array (today Cloud Setup, `com.duplocloud.cloud-setup`, the agent the ticket calls the Cloud Deployment Agent).
 Entries are manifest ids, the key the installer uses; an agent's UUID is not an install key.
 `scripts/install-extensions.sh` does the work: it refreshes the registry catalog, skips ids the catalog doesn't
 list or offers no version of (matched on the manifest id), leaves an extension that is already current, pinned or
