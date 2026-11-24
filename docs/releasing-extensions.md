@@ -55,7 +55,7 @@ DuploCloud's organizations a push to `dev` or `rc` runs nothing, since the conso
 The channel keeps the two sides apart on GitHub. A dev build is tagged `<slug>-dev-v<version>-sdk-<sdkVersion>` (an RC
 build `-rc-`) and its release is marked a prerelease, so it never takes the tag the main release of that version will
 use, and a resumed run only ever reads back a release from its own channel. The already-released rule applies within a
-channel: a version released from `dev` whose extension then changes fails the `dev` run until `manifest.version` moves,
+channel: a version released from `dev` whose agent then changes fails the `dev` run until `manifest.version` moves,
 and says nothing about `main`.
 
 The channels are separate on GitHub alone. `dev` and `rc` share the dev console, which holds one build per version and
@@ -192,7 +192,7 @@ organization variables:
 | `CONSOLE_SIGNING_CERT` | Organization variable | The publisher's certificate. The same value for every repository |
 | `EXTENSION_PUBLISHER_ROLE_ARN` | Organization variable | The AWS role the workflow assumes, by name, to write to the channels bucket |
 | `ARMDOT_LICENSE_KEY` | Organization secret | Base64 of DuploCloud's ArmDot license file. The reusable release action decodes it to the file `build-extension.sh` reads, so every build it runs obfuscates |
-| `RELEASE_BOT_GITHUB_TOKEN` | Organization secret, granted per repository | A GitHub token that reads the private `duplocloud-internal/.github`, where the ArmDot build files live. The release action fetches them with it before the build |
+| `RELEASE_BOT_GITHUB_TOKEN` in `duplocloud-internal`, `RELEASE_BOT_GITHUB_TOKEN_INTERNAL` in `duplocloud` | Organization secret, granted per repository | A GitHub token that reads the private `duplocloud-internal/.github`, where the ArmDot build files live. Each organization's token reaches that organization alone, so a repository in `duplocloud` reads the internal token from its own second secret. The release action fetches them with it before the build |
 | `CONSOLE_DEV_API_KEY` | Secret, granted per repository | The dev console's API key, used on `dev` and `rc` in place of `CONSOLE_API_KEY` |
 | `CONSOLE_DEV_SIGNING_KEY` | Secret, granted per repository | The dev console publisher's private key PEM, used on `dev` and `rc` |
 | `CONSOLE_DEV_SIGNING_CERT` | Organization variable | The dev console publisher's certificate |
@@ -247,13 +247,13 @@ This section is for a DuploCloud repository that still carries the earlier `rele
 grants anything: the publisher role trusts a repository through ai-release's Terraform, and a repository that
 lists itself in the old file fails at the credentials step instead of skipping the upload. The owner's part is
 three steps. Two more are done once per repository by the release team, and most repositories on the first
-extensions release already have them.
+agent release already have them.
 
 ### What the owner does
 
 1. **Settle the manifest id.** The console accepts an id only inside a namespace the publishing team holds.
    DuploCloud's team holds `duplo`, `com.duplo`, `com.duplocloud`, `net.duplo` and `net.duplocloud`; the
-   marketplace release tickets ask for `com.duplocloud.<name>`. Changing an id makes the extension a new record
+   marketplace release tickets ask for `com.duplocloud.<name>`. Changing an id makes the agent a new record
    to the console and to every installer, so decide it before the record below exists, and treat installs of
    the old id as a separate migration.
 2. **Make sure the console record exists.** Under **Agents > Agents** in the prod console, an agent whose
@@ -265,8 +265,8 @@ extensions release already have them.
    earlier workflow until `dev` is promoted, after which the default is enough (see
    [upgrading.md](upgrading.md)). The upgrade replaces `.github/` and `scripts/` wholesale, so it brings the
    new workflow, removes `extension-publishers.json` and refreshes `build-extension.sh`, and it overwrites the
-   framework's files in `build/` while leaving any of your own there. Your extensions, their project files and
-   your own docs are untouched. Open the pull request and let Extension CI run; it builds the bundle the way
+   framework's files in `build/` while leaving any of your own there. Your agents, their project files and
+   your own docs are untouched. Open the pull request and let Agent CI run; it builds the bundle the way
    the release will. Merge to `main`, and the release job cuts one GitHub Release per build, uploads it and
    registers it as an unpublished version on the console record. The job's log ends with how many builds it
    released, resumed and failed, with each release's URL above that line, and the repository's Releases page
@@ -290,7 +290,7 @@ the flow needs both, and the release job says which is missing before the build.
 
 ### The host's SDK line
 
-A host on extension SDK 1.2 or later ships `net10.0` reference assemblies only. On `dev` the build picks the
+A host on agent SDK 1.2 or later ships `net10.0` reference assemblies only. On `dev` the build picks the
 target framework from the host's SDK version and passes it to restore and publish, so a project file that
 names `net8.0` builds `net10.0` against a 1.2 host without an edit, and a `net8.0` build for a host on 1.0 or 1.1
 loads on both. [upgrading.md](upgrading.md#net-10-and-the-target-framework) has the detail. What a release

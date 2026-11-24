@@ -37,7 +37,7 @@ Worked examples live in [`samples/`](../samples) — start with
 | --- | --- |
 | [LICENSE](../LICENSE) | Apache-2.0, covering the dev-kit source |
 | [NOTICE](../NOTICE) | The boundary: what Apache-2.0 covers and what it does not |
-| [TERMS.md](../TERMS.md) | The proprietary container images and vendored library — local development only |
+| [TERMS.md](../TERMS.md) | The proprietary container images and vendored library |
 | [SECURITY.md](../SECURITY.md) | Reporting a vulnerability |
 | [PRIVACY.md](../PRIVACY.md) | The usage metrics the UI sends if you opt in, and what is collected |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | Framework PRs welcome; your agents stay in your repo |

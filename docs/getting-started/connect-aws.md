@@ -10,7 +10,7 @@ signed in to the portal. You also need an AWS account you can create an IAM user
 
 ## Why an access key, and not a role
 
-The published DuploCloud material leads with an IAM role. That works when a *hosted* HelpDesk
+The published DuploCloud material leads with an IAM role. That works when a *hosted* DuploCloud AI
 deployment is doing the connecting: the deployment runs inside AWS with an identity of its own, and it
 assumes your role from that identity.
 
@@ -121,7 +121,7 @@ this provider."* The provider says *which* account. The credential says *how to 
 
 The last step of the wizard is **Scope**.
 
-A **scope** is the boundary of what the agent may touch. Both HelpDesk tickets and agents target a
+A **scope** is the boundary of what the agent may touch. Both tickets and agents target a
 scope — a ticket runs against the scope you pick on it, and an agent's resource spec carries the
 scope IDs it was given.
 

@@ -40,7 +40,7 @@ from a built-in resource (Network, Namespace, …).
 > [19-detail-page](reference/19-detail-page.md) — the detail-page shell, the lifecycle rail, per-resource phases per mode ·
 > [20-ui-library](reference/20-ui-library.md) — every `ng-common-lib` export, a "need X → use Y" picker, verified recipes, the connections kit, and what works in a remote ·
 > [21-theming](reference/21-theming.md) — Light/Dark and brand themes: the `$g-*` colour names, rules, editors and charts.
-> [22-admin-resources](reference/21-admin-resources.md) — **admin-scoped** resources: `AdminResourcesController`, the admin route, the Admin Workspace, AI Admin menus/routes, and the skill write-back URL. ·
+> [21-admin-resources](reference/21-admin-resources.md) — **admin-scoped** resources: `AdminResourcesController`, the admin route, the Admin Workspace, AI Admin menus/routes, and the skill write-back URL. ·
 > [23-secrets](reference/23-secrets.md) — a Spec/Result field that holds a password/token/key: `[SecretValue]`/`[AgentSecretValue]`, encryption-at-rest, the reveal endpoint, write-only forms.
 
 > **Every dev-kit agent is TYPED — there is no archetype choice.** A typed agent ships a compiled
@@ -66,19 +66,20 @@ from a built-in resource (Network, Namespace, …).
 Everything between Phase 1 and Phase 5 is identical in both modes; only the load step (Phase 6) differs.
 Full mechanics: [06-registration](reference/06-registration.md).
 
-> **Getting the working copy.** The dev-kit repo is **PRIVATE**, so a **GitHub scope is required**; its token reaches
-> `gh` (`.config/gh/hosts.yml` + `GH_CONFIG_DIR`), so clone with **`gh repo clone …`** (never an unauthenticated
-> `git clone` of the dev-kit). 🔒 **Never read/print a credentials file** (`cat`/`echo`/`head`/`grep` of `hosts.yml`,
+> **Getting the working copy.** The dev-kit repo (`duplocloud/devkit`) is public: a plain `git clone` works. In-platform
+> the bootstrap has already cloned it (honouring the admin's `spec.devKitRepo`/`spec.devKitBranch`), so work in that
+> copy. The user's own repo (`spec.gitRepo`) needs the **GitHub scope**, whose token reaches `gh`
+> (`.config/gh/hosts.yml` + `GH_CONFIG_DIR`), so clone that one with **`gh repo clone …`**. 🔒 **Never read/print a credentials file** (`cat`/`echo`/`head`/`grep` of `hosts.yml`,
 > `.aws/credentials`, …) — to verify GitHub auth use **`gh auth status`**, never `cat hosts.yml`.
 > - **`spec.gitRepo` set (user's own repo):** `gh repo clone <orgName>/<name> repo` (with `-b <branch>`). If the repo
 >   is **EMPTY**, overlay the dev-kit's content EXCEPT `.git` so the user repo keeps its own `.git`/ownership:
->   `gh repo clone duplocloud/devkit /tmp/devkit && rsync -a --exclude=.git /tmp/devkit/ repo/`.
+>   `git clone https://github.com/duplocloud/devkit /tmp/devkit && rsync -a --exclude=.git /tmp/devkit/ repo/`.
 >   If it **already has** dev-kit content, just work in it — but **enumerate first**: `ls extensions/*/manifest.json`.
 >   Other developers' agents may live beside yours; the requirement decides whether you MODIFY an existing
 >   `extensions/<name>/` or scaffold a NEW `extensions/<name2>/` (ask when ambiguous), and before scaffolding new,
 >   read a sibling to match its conventions. **Hot-load is on-demand**, **push is user-initiated only**
 >   (chat or the result-page badge); prompt to **commit**/**resync** and report `result.gitStatus` after each git op.
-> - **No `spec.gitRepo`:** `gh repo clone duplocloud/devkit` and work in it (throwaway, hot-load only).
+> - **No `spec.gitRepo`:** work in the dev-kit copy (throwaway, hot-load only).
 > - **Local (human-cloned):** you already cloned the dev-kit. First time, run `./scripts/change_git_owner.sh <your-repo>`
 >   to adopt it; if your repo already has dev-kit content, just work in it.
 >
@@ -128,7 +129,8 @@ Settle before building (derive, else ask — **after** listening):
   encryption-at-rest, a reveal endpoint, a write-only edit form) — present the field table with a
   **Sensitive?** column so the answer is visible when you ask for approval.
 - **Provisioning MODE** — decide HOW this resource is provisioned. **Do not default to an agent skill.** Pick by
-  what the work actually is (derive from the requirement; confirm if unsure):
+  what the work actually is (derive from the requirement; tell the user your pick by its plain name from
+  [Talking to the user](#talking-to-the-user)):
   | Mode | Choose when the requirement is… | Wiring | Sample |
   |---|---|---|---|
   | **Worker** | a **deterministic** job: pure compute, or **reconcile/apply multiple objects** with retry/drift; words like *"worker", "background", "compute", "reconcile", "keep in sync"*. **No LLM needed.** | service `NoSkillsFallbackMode => ProvisioningMode.Worker`; **no** skill / `skillMappings`; a `ResourceWorkerBase` whose `ApplyAsync` does the work + `SaveProgressAsync`; register `AddHostedService` in `IDuploExtension.Configure` | `samples/worker-compute` (compute) · `samples/worker-appstack` (k8s) |
@@ -183,36 +185,123 @@ Settle before building (derive, else ask — **after** listening):
   scaffold ships), under a parent entity (child resources), or grouped under the agent's own category node. Does
   any **custom endpoint** need an explicitly granted **named action** instead of plain CRUD (restart / console /
   credential-minting / apply-infrastructure)? — [18-access-control](reference/18-access-control.md).
-- **Menu placement** — ask where it appears in the AI Suite left-nav (by **title**, never silently default to
-  DevOps): a **new top-level group** (e.g. `Jenkins`, `GCP`), **nested under an existing section** (e.g. `DevOps`), or
-  **no menu**. An **admin** resource's tree goes in the **AI Admin** nav: its top-level node carries
+- **Menu placement** — the items it adds **inside** its left-nav section, or **no menu**. With an **Agent** (below),
+  the Agent decides the section, and every top-level `menus[]` node lands under it, so settle only the item titles
+  and their order within the section. Without
+  one, placement is by **title**: a **new top-level group** (e.g. `Jenkins`, `GCP`) or **nested under an existing
+  section** (e.g. `Infrastructure`). Default to its own group and state it in the summary; ask only when the
+  requirement points two ways. An **admin** resource's tree goes in the **AI Admin** nav: its top-level node carries
   `"scope": "admin"`, and so does each `routes[]` entry it links to ([21](reference/21-admin-resources.md#frontend)). The user gives titles; **you** generate ids, `relativeUrl`s and the matching `frontend.routes[]` —
   [08-parent-child-and-menus](reference/08-parent-child-and-menus.md). Also settle **title** + **`matIcon`** per
   item — derive the icon from the agent's purpose, per the Left-nav icon bullet above.
+- **Agent** — the top-level left-nav section the agent sits in: an **existing** section (`Infrastructure`, or
+  any other built-in heading by its exact title) or a **new** one (`Compliance`, `Release Management`, or a typed
+  name). Ask it with the Agent row in the table below, which also offers the position.
+  Write it as the **manifest-root** `agent` field (sibling of `id` / `name` / `version`; never on a menu node; one
+  per manifest):
+  - **Existing section** → the plain string, e.g. `"agent": "Infrastructure"`. A built-in section keeps its own
+    position, so never add an order. Never write `"DevOps"`: the built-in heading is now Infrastructure, and
+    `"DevOps"` creates a second, separate heading.
+  - **New section** → **always** the object form with an order, e.g.
+    `"agent": { "name": "Release Management", "order": 85 }`. Without an order a new section defaults to `0` and
+    sits at the very top of the nav, above HelpDesk. Use `85` (just above Settings) unless the author picks a
+    position; "after <section>" is that section's number + 5, "at the top" is `5`. Built-in numbers: HelpDesk 10,
+    Projects 20, Infrastructure 30, Scopes 40, KB 50, Resources 60, Agent Studio 70, Analytics 80, Settings 90.
+  Every agent's default section comes from its own manifest `agent` (DuploCloud's own agents included); an
+  admin can override the section and position from the Marketplace, and that override wins and survives upgrades.
+  The name must be non-empty, at most 64
+  characters, with no control characters, and `order` an integer — an invalid value is rejected at upload (HTTP 400)
+  and fails the provisioning when deployed through a resource.
+  Every top-level `menus[]` node then renders as a child of the agent's heading, so don't wrap menus
+  in a node titled after the agent ([08 → Filing under an agent](reference/08-parent-child-and-menus.md#filing-under-an-agent--the-root-agent-field)).
+  If the author declines to pick one, delete the template's `agent` line - omit the field entirely, never write `agent: ""`.
 - **One or many resources?** — **flat** (independent — e.g. `GCP` → network/cluster/database) or **parent → child**
   (`samples/parent-child`); several top-level menu groups are fine — [08](reference/08-parent-child-and-menus.md).
 
-**Present the settled shape for approval** (local: the plan you `ExitPlanMode` with; in-platform: the `Processing`
-summary you post) **as a structured shape, not a prose blurb:** a **Spec** field table (name · type ·
-required/optional · sensitive?), a **Result** field table (name · type · sensitive?), the **agent scope** (workspace / admin) and the **provisioning mode**, each with a one-line reason, the
-**detail view's shape** — the **lifecycle phases** this resource goes through (label + the status/result field that
-drives each; [19-detail-page](reference/19-detail-page.md) → "Deriving phases") and the **Result tabs** (Overview at
-minimum; name each further tab; [17-custom-result-views](reference/17-custom-result-views.md)) — the **setup
-page's steps** (one connection per provider, then the settings) — and a short
-**user-experience** walkthrough: left-nav placement (AI DevOps or AI Admin), the add form (with the AI-use disclosure in Agent mode), the list, the detail page, and what provisioning
-does end-to-end. Do this per resource for multi-resource agents.
+### Talking to the user
+
+The list above is your checklist; its words are yours. The user knows their problem: what people type in, what
+they want to see afterwards, who manages it, which outside system it talks to. Settle the checklist from that, and
+put questions to the user in their words, once, in one batch:
+
+- **Always ask:** the Name, Agent, Spec fields and Result fields rows, each as your guess for the user to confirm, and
+  the Sensitive fields row for any field that looks like a password, token or key. For the Agent row, put your guess
+  first ("I'd put it in a new **Release Management** section just above Settings") and keep the row's choices and the
+  position offer, so the user sees both what a section is and that they can move it.
+  In-platform, when these four are all the batch holds, they ride the pause below instead of a separate ask.
+- **Also ask:** any other row where the requirement points two ways and a wrong guess changes what gets built.
+- **Every other row:** state your choice as a default in the summary below. The user approves the summary before
+  you build, so a stated default is a decision.
+
+Never put a checklist term to the user (spec, result, resource, scope, provider, provisioning, mode, CRUD,
+endpoint, controller, section id), except under **Technical details** in the summary, which is for reviewers. Examples below use a Jenkins job; use the user's own system and words.
+
+| Decision | Ask the user | Default when the requirement is silent |
+|---|---|---|
+| Name | "I'll call it **Jenkins Jobs**. Keep that name?" (derive the ids yourself) | derived from the requirement |
+| Agent scope | "Who manages these: people in a workspace, or only platform admins?" | people in a workspace |
+| Provider scopes for testing | "To test this I need to reach Jenkins. Which saved connection should I use?" List them by name, plus "it doesn't need one". | none when the work touches no outside system. In-platform the create form's Scopes field answers this and the ticket cannot list connections: when the field is empty and the work needs one, state "No Jenkins connection was picked, so I'll build it without testing against Jenkins." |
+| Spec fields | "When someone adds one, what do they fill in? My guess: job name (required), branch (default main)." | the requirement's Inputs section |
+| Sensitive fields | Per field that looks like a password, token or key: "Should **API key** stay hidden once it's saved, like a password? Is it how this signs in to Jenkins, or does each job have its own?" | hidden; signing in to the outside system belongs to its connection |
+| Result fields | "When it's done, what should the page show? My guess: build number, status, duration, a link to the log." | the requirement's Result section |
+| Provisioning mode | Never asked. State it: "This is a fixed set of steps, so it runs as a **background job** with no AI. Tell me if it needs AI judgement." | derived (table below) |
+| Custom endpoints | "Besides add, edit and delete, does it need any buttons? For example **Run now** or **View logs**." | none |
+| Access control | Only when a button does something sensitive: "Can anyone in the workspace press **Restart**, or only people you allow?" | anyone in the workspace |
+| One or many resources | Only with more than one thing, and never when one only uses the other (an admin thing that workspaces pick): "Does one **Pipeline** hold many **Jobs**?" | flat; an admin thing plus a workspace thing that picks it follows `samples/admin-settings` |
+| Agent | Always asked: "Your agent gets a section in the left menu in the DuploCloud AI platform. Should it join an existing section, like **Infrastructure**, or start a new one: **Compliance**, **Release Management**, or a name of your own? A new section goes just above **Settings** unless you want it somewhere else, for example right after Infrastructure." | Infrastructure for infrastructure work; a new section at 85 (just above Settings) |
+| Menu placement | Only when the requirement points two ways: "Inside that section, should it be one **Jenkins Jobs** page, or separate **Jobs** and **Pipelines** pages?" | one page per resource |
+| Deprovision / teardown | "When someone deletes one here, should the Jenkins job be deleted too?" | delete what provisioning created |
+| Outside auth | "How does Jenkins sign in: username and API token, or a single token?" | from the chosen connection |
+| Admin setup page | Only when the requirement hints at admin-wide settings: "Is there anything an admin should set once for everyone, for example a default Jenkins folder?" | one connection per outside system the requirement names; no settings |
+
+The four provisioning modes, as the user hears them:
+
+| Mode | Plain name | What the agent says |
+|---|---|---|
+| Worker | **Background job** | Runs a fixed set of steps in the background and retries until done. No AI. |
+| Agent | **AI agent** | An AI works out the steps each time. For open-ended work. |
+| Passthrough | **Instant** | Creates one thing the moment you save. |
+| No-provision | **Read-only** | Shows information and creates nothing. |
+
+The form shape (simple form, step-by-step setup, repeatable rows, one-holds-many, tabbed results) is your pick from
+the sample index above. Describe it in plain words in the summary ("a three-step setup: Connection, Job,
+Schedule"); the user can ask for a different one.
+
+**The summary the user approves** (local: the plan you `ExitPlanMode` with; in-platform: the "Build this?" ask below),
+per resource for multi-resource agents:
+
+1. **What you'll get**: five to eight plain lines. Its name, where it appears in the menu (AI DevOps or AI Admin, and for AI DevOps the left-menu section and its
+   position, e.g. "a new **Release Management** section just above Settings"), what someone
+   fills in, what happens after they save (name the pattern by its plain name; in Agent mode, that the add form
+   tells users AI does the work), what the page shows, which values stay hidden, what delete does, and what an admin sets up once.
+2. One line per default the user has not confirmed, so they can object.
+3. **Technical details**, as a structured shape: a **Spec** field table (name · type · required/optional · sensitive?), a
+   **Result** field table (name · type · sensitive?), the **agent scope** (workspace / admin) and the **provisioning mode**,
+   each with a one-line reason, and the **detail view's shape** — the **lifecycle phases** this resource goes through
+   (label + the status/result field that drives each; [19-detail-page](reference/19-detail-page.md) → "Deriving
+   phases") and the **Result tabs** (Overview at minimum; name each further tab;
+   [17-custom-result-views](reference/17-custom-result-views.md)) — and the **setup page's steps** (one connection per
+   provider, then the settings).
 
 **Where the answers come from / how to ask:**
-- **In-platform:** read `spec.description`/`spec.icon` from `shared/extension.json`. If anything required is missing
-  or ambiguous, POST status **`Blocked`** with a `blockedReason` that lists the specific questions (and post the
-  same as a ticket chat message), then **stop** — do not scaffold. On the next invocation re-read
-  `shared/extension.json` + the latest chat reply and proceed **only** once every required item is unambiguous.
-  Once clear, POST `Processing` and continue (Phase 6 shows the curl).
+- **In-platform:** read `spec.description`/`spec.icon`/`spec.scopeIds` from `shared/extension.json` (plus
+  `shared/uploads/*`). Ask through the bootstrap's protocol (`duplo-extension-ticket`, "Questions — ask in chat, never
+  park"): POST `Blocked` with `subStatus` `Needs more details` and a `blockedReason` of one plain line, then ONE
+  `ask_human` call holding the whole batch (skip it when it holds only the four always-ask guesses). When the answers
+  arrive, go straight to the pause.
+  Then pause before any code, whatever the batch held. POST `Blocked` with the `blockedReason` "Review what I'll build":
   ```bash
   curl -fsS -X POST "$RES/status" -H "Authorization: Bearer $DUPLO_TOKEN" -H "Content-Type: application/json" \
-    -d '{ "status": "Blocked", "blockedReason": "Need before I can build: (1) menu placement — section id / \"top-level\" / none? (2) spec fields + types. ..." }'
+    -d '{ "status": "Blocked", "subStatus": "Needs more details", "blockedReason": "Review what I'\''ll build" }'
   ```
-- **Local:** ask the developer conversationally and **wait** for answers. Do not scaffold until clear.
+  then ask ONE `ask_human` `yes_no` question: the summary, ending "Build this?". Add no options of your own: the
+  platform's "Chat about this" row is where the user says what to change.
+  - **Yes** → POST `Processing` / `Authoring code` and go to Phase 2.
+  - **No / anything else** → the reply is the change request. Revise the summary and repeat the pause: the `Blocked`
+    POST before every ask, then the question.
+  - Never scaffold before a **Yes**.
+- **Local:** ask the batch in one message (`AskUserQuestion` when the session has it) and **wait** for answers. The
+  summary is the plan you `ExitPlanMode` with. Do not scaffold until it is approved.
 
 ## Phase 2 — scaffold from the template
 
@@ -226,9 +315,11 @@ In a **clone-and-own repo** (adopted via `scripts/change_git_owner.sh` or `scrip
 extension lives in its own **`extensions/<name>/`** dir. Scaffold from the bundled template (skip if a starter was
 already seeded — then adapt what's there):
 ```bash
-[ -d "extensions/<name>" ] || cp -r "$(dirname "$0")/templates/helloworld" "extensions/<name>"
+cd "$(git rev-parse --show-toplevel)"   # the repo root; in-platform, the clone the bootstrap made
+[ -d "extensions/<name>" ] || cp -r ".claude/skills/duplo-extension-dev/templates/helloworld" "extensions/<name>"
 ```
-(In-platform inside a provisioning ticket, scaffold into the ticket workdir instead — same steps, different dir.)
+In-platform the bootstrap clones the dev-kit (or the user's repo) into the ticket workdir and works from that clone's
+root, so `extensions/<name>/` and the template are both inside it.
 
 Adapt inside `extensions/<name>/` — rename `HelloWorld`→`<Name>` consistently **across backend AND frontend**
 (the build fails on leftover `HelloWorld`/`HelloService`/`hw-` identifiers). Per [02-authoring-guide](reference/02-authoring-guide.md):

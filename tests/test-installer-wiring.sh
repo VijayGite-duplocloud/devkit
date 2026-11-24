@@ -298,6 +298,10 @@ if mode == "set":
         env.get("EXTENSIONS_EXCLUDE"))
     out("a catalog key passes through from .env", env.get("LICENSE_SERVER_URL") == "https://license.example",
         env.get("LICENSE_SERVER_URL"))
+    for k, v in (("URL_ROUTE_URL", "https://results.prod-apps.duplocloud.net/urls"),
+                 ("CHANNELS_BASE_URL", "https://channels.prod-apps.duplocloud.net"),
+                 ("CHANNELS_BUCKET", "duplo-helpdesk-channels")):
+        out("unset %s stays on the prod catalog" % k, env.get(k) == v, env.get(k))
     leaked = [k for k in ("ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY", "Authentication__LocalAdminPassword",
                           "Encryption__MasterKey") if k in env]
     out("installer receives no LLM or admin credentials", not leaked and not inst.get("env_file"), ",".join(leaked))
@@ -342,11 +346,21 @@ if mode == "set":
     out("studio sends the same API token", senv.get("Agent__ApiAuthToken") == "fixture-agent-token",
         senv.get("Agent__ApiAuthToken"))
     out("installer receives no agent API token", "Agent__ApiAuthToken" not in env and "CCA_API_AUTH_TOKEN" not in env, env.keys())
+elif mode == "empty":
+    out("an empty LICENSE_SERVER_URL passes through", unset("LICENSE_SERVER_URL"), env.get("LICENSE_SERVER_URL"))
+    for k, v in (("URL_ROUTE_URL", "https://results.prod-apps.duplocloud.net/urls"),
+                 ("CHANNELS_BASE_URL", "https://channels.prod-apps.duplocloud.net"),
+                 ("CHANNELS_BUCKET", "duplo-helpdesk-channels")):
+        out("%s stays on the prod catalog when LICENSE_SERVER_URL is empty" % k, env.get(k) == v, env.get(k))
 else:
     out("EXTENSIONS_ENABLED defaults to true", env.get("EXTENSIONS_ENABLED") == "true", env.get("EXTENSIONS_ENABLED"))
     out("EXTENSIONS_SOURCE defaults to customer", env.get("EXTENSIONS_SOURCE") == "customer", env.get("EXTENSIONS_SOURCE"))
-    for k in ("LICENSE_SERVER_URL", "URL_ROUTE_URL", "CHANNELS_BASE_URL", "CHANNELS_BUCKET", "EXTENSIONS_EXCLUDE",
-              "EXTENSIONS_ENROLLMENT_ID"):
+    for k, v in (("LICENSE_SERVER_URL", "https://console.duplocloud.com"),
+                 ("URL_ROUTE_URL", "https://results.prod-apps.duplocloud.net/urls"),
+                 ("CHANNELS_BASE_URL", "https://channels.prod-apps.duplocloud.net"),
+                 ("CHANNELS_BUCKET", "duplo-helpdesk-channels")):
+        out("%s defaults to the prod catalog" % k, env.get(k) == v, env.get(k))
+    for k in ("EXTENSIONS_EXCLUDE", "EXTENSIONS_ENROLLMENT_ID"):
         out("%s stays unset by default" % k, unset(k), env.get(k))
     xenv = svc.get("xterm", {}).get("environment") or {}
     out("xterm origins default to the unoffset portal port", xenv.get("ALLOWED_ORIGINS") == "http://localhost:4200,http://127.0.0.1:4200",
@@ -379,6 +393,12 @@ else:
     tally < <(printf '%s' "$J" | check unset)
   else
     t "compose config renders with the optional keys unset"; bad "$(head -3 "$TMP/err" | tr '\n' ' ')"
+  fi
+
+  if J="$(render INSTALLER_TAG=fixture-tag STUDIO_TAG=studio-fixture LICENSE_SERVER_URL=)"; then
+    tally < <(printf '%s' "$J" | check empty)
+  else
+    t "compose config renders with an empty LICENSE_SERVER_URL"; bad "$(head -3 "$TMP/err" | tr '\n' ' ')"
   fi
 fi
 

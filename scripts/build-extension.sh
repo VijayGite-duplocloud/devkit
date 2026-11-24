@@ -199,8 +199,8 @@ EOF
   fi
 fi
 
-# No leftover template identifiers in a renamed extension. Samples/templates may keep 'Hello' names (reference
-# code), but a real extension under extensions/<name>/ must rename the FE off the template (see the FE rename
+# No leftover template identifiers in a renamed agent. Samples/templates may keep 'Hello' names (reference
+# code), but a real agent under extensions/<name>/ must rename the FE off the template (see the FE rename
 # table in reference/02-authoring-guide.md).
 case "$DIR" in
   *samples/*|*templates/*) ;;
@@ -218,7 +218,7 @@ case "$DIR" in
 esac
 
 if [ "$viol" -ne 0 ]; then
-  echo "ERROR: extension naming validation failed — fix the ✗ items above (reference/00-naming.md)." >&2
+  echo "ERROR: agent naming validation failed — fix the ✗ items above (reference/00-naming.md)." >&2
   exit 1
 fi
 echo "    naming OK"
@@ -588,7 +588,7 @@ if [ "${#SDK_VERSIONS[@]}" -eq 0 ]; then
   if [ -z "$SDK_VER" ]; then
     echo "ERROR: could not read the host SDK version from $BASE_URL/v1/aiservicedesk/extensions/sdk-version" >&2
     echo "       HTTP $SDK_CODE — response (first 300 chars): $(printf '%s' "$SDK_RESP" | tr -d '\r' | head -c 300)" >&2
-    echo "       Check DUPLO_HOST is the AI Helpdesk studio base URL (serving /v1/aiservicedesk), is reachable," >&2
+    echo "       Check DUPLO_HOST is the DuploCloud AI studio base URL (serving /v1/aiservicedesk), is reachable," >&2
     echo "       has no trailing path, and that TOKEN is set. To build without a host, set DUPLO_SDK_VERSIONS." >&2
     exit 1
   fi

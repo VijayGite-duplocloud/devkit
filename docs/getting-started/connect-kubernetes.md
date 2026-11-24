@@ -13,7 +13,7 @@ for this page — the two providers are independent — though you will normally
 ## Why a token, and not a role
 
 Same reasoning as the AWS page, one layer down. An IAM role has to be *assumed* by something that
-already holds an AWS identity — a hosted HelpDesk deployment running inside AWS has one, and maps it
+already holds an AWS identity — a hosted DuploCloud AI deployment running inside AWS has one, and maps it
 to a Kubernetes group so it never stores a cluster credential at all.
 
 This dev kit is Docker Compose on your laptop. It has no AWS identity, so there is nothing for a role
@@ -255,7 +255,7 @@ credential says *how to authenticate to it*.
 The last step of the wizard is **Scope**.
 
 A **scope** is the boundary of what the agent may touch: a credential, and the resources that
-credential may be used against. Both HelpDesk tickets and agents target a scope.
+credential may be used against. Both tickets and agents target a scope.
 
 When a ticket runs, the platform expands the scope into its provider and credential and hands them to
 the agent, which writes them into the ticket's working directory — for Kubernetes, as a context in a

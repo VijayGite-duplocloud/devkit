@@ -84,8 +84,8 @@ such as `deploy-extension.sh` with the installer stopped or Agent Studio's in-pl
 run `./scripts/remove-extension.sh [id]` before relying on the installer for a rebuild.
 
 **From the catalog.** The Available tab lists the agents your license entitles you to, a trial included, and
-Install there hands the click to this installer. The installer reads that catalog only when `.env` sets these keys,
-so by default it runs on your own builds alone:
+Install there hands the click to this installer. Unset, the installer uses this prod catalog. A value in `.env`
+replaces that default.
 
 ```bash
 LICENSE_SERVER_URL=https://console.duplocloud.com
@@ -94,7 +94,8 @@ CHANNELS_BASE_URL=https://channels.prod-apps.duplocloud.net
 CHANNELS_BUCKET=duplo-helpdesk-channels
 ```
 
-Re-run `./run.sh` after changing them. `EXTENSIONS_ENABLED=false` in `.env` stops the installer installing anything,
+Set `LICENSE_SERVER_URL` empty to leave the catalog off and run on your own builds alone. Re-run `./run.sh` after
+changing them. `EXTENSIONS_ENABLED=false` in `.env` stops the installer installing anything,
 and `EXTENSIONS_EXCLUDE` takes a JSON array of agent ids it leaves alone. `docker-compose.yml` lists the other
 `EXTENSIONS_` keys it passes through.
 
@@ -122,23 +123,23 @@ for each `docker compose` above.
 ## Building for more than one SDK version
 
 A host loads only a bundle built against its own SDK version: the loader rejects a bundle whose `manifest.json`
-`sdkVersion` differs from the SDK the host runs, so an extension that has to run on hosts at different versions
+`sdkVersion` differs from the SDK the host runs, so an agent that has to run on hosts at different versions
 ships one bundle per version
 ([why exactness matters](.claude/skills/duplo-extension-dev/reference/06-registration.md#sdk-version-pinning--why-exactness-matters)).
 By default `build-extension.sh` takes the SDK from the running host and builds the one bundle that host loads,
-at `dist/extension.zip`. To build for several versions, name them and the build takes each SDK from the package
+at `dist/agent.zip`. To build for several versions, name them and the build takes each SDK from the package
 feed instead, with no host at all:
 
 ```bash
 DUPLO_SDK_VERSIONS=1.0.6,1.0.7 ./scripts/build-extension.sh samples/helloworld
-ls samples/helloworld/dist/sdk-*/extension.zip
+ls samples/helloworld/dist/sdk-*/agent.zip
 ```
 
 `DUPLO_SDK_VERSIONS` lists the versions, comma-separated or one per line. Each one is restored as the
 `Duplocloud.AiHelpdesk.Sdk` package at exactly that version from the `nuget.org` source in `backend/nuget.config`,
 so it has to be a version the feed publishes. The frontend is built once and the backend once per version, and
-each bundle lands at `dist/sdk-[version]/extension.zip` with that version stamped as its `sdkVersion`. Nothing is
-written to `dist/extension.zip`, and a bundle for a version no longer listed is removed by the next build. Leave
+each bundle lands at `dist/sdk-[version]/agent.zip` with that version stamped as its `sdkVersion`. Nothing is
+written to `dist/agent.zip`, and a bundle for a version no longer listed is removed by the next build. Leave
 `DUPLO_SDK_VERSIONS` unset for the single host build. The build runs in the builder container as usual; pass
 `--native` to use a .NET 8 SDK and Node 22 you installed yourself.
 
@@ -178,9 +179,9 @@ guides.
   your Agents against it and ship the parts your build bundles into a compiled
   Agents; you may not republish, repackage, or modify it. See [TERMS.md](TERMS.md)
   and the `NOTICE` beside each tarball.
-- **This kit is for local development only.** As more fully described in the
-  [TERMS](TERMS.md), the closed source materials are provided for non-production use only.
-- **Going to production?** Contact **sales@duplocloud.net** for a production license.
+- **Production use is allowed.** The Starter Tier can run in production, within the limits your license sets
+  (for example, the number of users and Agents). For Pro or Enterprise licensing, contact
+  **sales@duplocloud.net**.
 - **Your Agents are yours.** DuploCloud claims no rights in anything you write under
   `extensions/`. See [NOTICE](NOTICE) for the full breakdown.
 
@@ -190,7 +191,7 @@ guides.
 | --- | --- |
 | [LICENSE](LICENSE) | **Apache-2.0** — the dev-kit source DuploCloud authored (`run.sh`, `scripts/`, `samples/`, `docker-compose.yml`, `nginx/`, `.claude/`). Use, modify, and redistribute freely. Does **not** cover the vendored library tarballs under `packages/` or `**/frontend/vendor/`. |
 | [NOTICE](NOTICE) | The boundary: what Apache-2.0 covers, what it doesn't (the container images and the vendored UI library), and the third-party images. Apache-2.0 §4(d) requires you to keep it in any redistribution. |
-| [TERMS.md](TERMS.md) | The proprietary pieces that are *not* Apache-licensed: the **`quay.io/duplocloud/*` container images** (local development only, **no modification**, production requires a separate license) and the **vendored `@duplocloud-internal/ng-common-lib` tarball** (build against it and ship what your build bundles — nothing else). Also confirms you own your agents. |
+| [TERMS.md](TERMS.md) | The proprietary pieces that are *not* Apache-licensed: the **`quay.io/duplocloud/*` container images** (**no modification**, no redistribution) and the **vendored `@duplocloud-internal/ng-common-lib` tarball** (build against it and ship what your build bundles — nothing else). Links the DuploCloud Terms of Service, which also confirm you own your agents. |
 | [SECURITY.md](SECURITY.md) | Reporting a vulnerability. **Email `ai-reporting@duplocloud.net` — don't open a public issue.** |
 | [PRIVACY.md](PRIVACY.md) | The usage metrics the UI sends if you opt in, tied to your sign-in email — what is collected and what is not. |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | PRs improving the *framework* are welcome. Your own agents stay in your repo and don't belong upstream. |
@@ -198,4 +199,4 @@ guides.
 | [SUPPORT.md](SUPPORT.md) | Where to get help and what to expect: **GitHub Issues, best effort, no SLA.** Also what belongs somewhere else. |
 
 See [License and use](#license-and-use) above for the short version, or
-**sales@duplocloud.net** for a production license.
+**sales@duplocloud.net** for Pro or Enterprise licensing.

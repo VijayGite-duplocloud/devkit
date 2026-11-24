@@ -172,5 +172,5 @@ and doing nothing, it doesn't count, and we'll be able to tell.
 
 ---
 
-*This kit is for local development only. See [LICENSE](../LICENSE) and [TERMS.md](../TERMS.md); for a
-production license, contact sales@duplocloud.net.*
+*See [LICENSE](../LICENSE) and [TERMS.md](../TERMS.md). For Pro or Enterprise licensing, contact
+sales@duplocloud.net.*
