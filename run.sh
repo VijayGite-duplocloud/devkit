@@ -1408,7 +1408,7 @@ esac
 # is left alone. Non-fatal, like the KB step above: an extension that failed to install must never stop the
 # platform coming up.
 DEVKIT_EXTENSIONS=(
-  com.duplocloud.demo-cloud-deployment   # Cloud Deployment Agent (manifest id; its agent id 99104691-… is not an install key)
+  com.duplocloud.cloud-setup   # Cloud Deployment Agent (manifest id; its agent id 99104691-… is not an install key)
 )
 EXT_LINE=""
 echo "==> Installing default extensions…"
