@@ -84,8 +84,8 @@ such as `deploy-extension.sh` with the installer stopped or Extension Studio's i
 run `./scripts/remove-extension.sh [id]` before relying on the installer for a rebuild.
 
 **From the catalog.** The Available tab lists the extensions your license entitles you to, a trial included, and
-Install there hands the click to this installer. The installer reads that catalog only when `.env` sets these keys,
-so by default it runs on your own builds alone:
+Install there hands the click to this installer. Unset, the installer uses this prod catalog. A value in `.env`
+replaces that default.
 
 ```bash
 LICENSE_SERVER_URL=https://console.duplocloud.com
@@ -94,7 +94,8 @@ CHANNELS_BASE_URL=https://channels.prod-apps.duplocloud.net
 CHANNELS_BUCKET=duplo-helpdesk-channels
 ```
 
-Re-run `./run.sh` after changing them. `EXTENSIONS_ENABLED=false` in `.env` stops the installer installing anything,
+Set `LICENSE_SERVER_URL` empty to leave the catalog off and run on your own builds alone. Re-run `./run.sh` after
+changing them. `EXTENSIONS_ENABLED=false` in `.env` stops the installer installing anything,
 and `EXTENSIONS_EXCLUDE` takes a JSON array of extension ids it leaves alone. `docker-compose.yml` lists the other
 `EXTENSIONS_` keys it passes through.
 
