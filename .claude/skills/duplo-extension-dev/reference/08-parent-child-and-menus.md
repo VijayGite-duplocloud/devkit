@@ -181,10 +181,10 @@ It is either a plain string or `{ "name": …, "order": <integer> }`. The object
 author wants to set its heading order:
 
 ```jsonc
-// manifest.json (root) — the usual form
-"agent": "Release Management",
+// manifest.json (root) - joining a built-in section
+"agent": "Infrastructure",
 
-// …or, when the author gives a heading order
+// …or a new section, always with an order
 "agent": { "name": "Release Management", "order": 35 },
 ```
 
@@ -217,8 +217,8 @@ Write the chosen name **verbatim** — no slugging — and:
 `Observability` is not offered: it reads like the existing **Analytics → Observability** page, but only top-level
 headings are matched, so it would create a second, top-level Observability section.
 
-If the author declines to pick an agent,
-**omit the field entirely**; never write `agent: ""`. An extension with no agent still shows in the nav (by menu
+If the author declines to pick an agent, delete the
+template's `agent` line - **omit the field entirely**; never write `agent: ""`. An extension with no agent still shows in the nav (by menu
 title, Pattern A above), but the Marketplace lists it under **Other**.
 
 **Validation.** An invalid `agent` is rejected when the extension is uploaded (HTTP 400), and fails the provisioning

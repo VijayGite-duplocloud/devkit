@@ -214,7 +214,7 @@ Settle before building (derive, else ask — **after** listening):
   and fails the provisioning when deployed through a resource.
   Every top-level `menus[]` node then renders as a child of the agent's heading, so don't wrap menus
   in a node titled after the agent ([08 → Filing under an agent](reference/08-parent-child-and-menus.md#filing-under-an-agent--the-root-agent-field)).
-  If the author declines to pick one, omit the field entirely — never write `agent: ""`.
+  If the author declines to pick one, delete the template's `agent` line - omit the field entirely, never write `agent: ""`.
 - **One or many resources?** — **flat** (independent — e.g. `GCP` → network/cluster/database) or **parent → child**
   (`samples/parent-child`); several top-level menu groups are fine — [08](reference/08-parent-child-and-menus.md).
 

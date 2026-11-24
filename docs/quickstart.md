@@ -212,8 +212,8 @@ Naming — use exactly these, do not ask me to confirm them:
   - restSegment / frontend route / menu relativeUrl: extensions/whois-lookups
   - Mongo collection: extension_domainlookup
 
-Menu placement — do not ask me about this either: a new top-level left-nav group titled
-"Domains", with a single item titled "Domain Lookup".
+Agent and menu — do not ask me about these either: file it under a new left-menu section
+(its agent) named "Domains", just above Settings, with a single item titled "Domain Lookup".
 
 It needs NO cloud credentials — RDAP and WHOIS are public and unauthenticated. Do not
 attach a scope, do not ask me which scope to use, and do not add any provider config.
@@ -294,7 +294,7 @@ is no teardown to write.
 ```
 
 That block answers every question the intake would otherwise walk you through — the name, the scope,
-the spec and result fields, the provisioning mode, the menu — so Claude Code should go straight to
+the spec and result fields, the provisioning mode, the left-menu section and its items — so Claude Code should go straight to
 **one plan** covering the fields, the UI, the files, and the build commands. Approve it once and it
 runs unattended.
 

@@ -23,7 +23,9 @@ DOCS=(docs/quickstart.md docs/getting-started/build-your-first-extension.md)
 BANNED='\b(specs?|results?|resources?|scopes?|providers?|provisioning|modes?|crud|endpoints?|controllers?|fe|section ids?|origintypes?|remotes?)\b'
 
 # The "Talking to the user" subsection: from its heading to the next ## or ### heading.
-talking() { awk '/^### Talking to the user/{on=1; print; next} on && /^##+ /{exit} on' "$SKILL"; }
+# `|| true`: under pipefail, `talking | grep -q` would otherwise fail whenever grep exits on its first match while
+# awk is still writing (SIGPIPE), which made these checks pass or fail by timing.
+talking() { awk '/^### Talking to the user/{on=1; print; next} on && /^##+ /{exit} on' "$SKILL" || true; }
 
 # Prints the cells of every table column whose header is exactly "$1", one per line.
 column_cells() {
@@ -62,9 +64,15 @@ elif grep -q "Change something" "$SKILL"; then
   bad "'Change something' duplicates the platform's own 'Chat about this' row"
 else ok; fi
 
-t "the three always-ask guesses ride the pause when they are all the batch holds, and the summary names it"
+t "the four always-ask guesses ride the pause when they are all the batch holds, and the summary names it"
 if talking | grep -q "ride the pause" && talking | grep -qi "its name"; then ok
 else bad "no 'ride the pause' exception or no name in What you'll get"; fi
+
+t "Agent is always asked, offers a position, and a new section always gets an order"
+if talking | grep -q 'Always ask:\*\* the Name, Agent,' \
+   && talking | grep '^| Agent |' | grep -q 'just above \*\*Settings\*\*' \
+   && grep -q 'always\*\* the object form with an order' "$SKILL"; then ok
+else bad "Agent not always asked, no position offered, or a new section may omit its order"; fi
 
 t "Technical details is the one place checklist terms reach the user"
 talking | grep -q 'except under \*\*Technical details\*\*' && ok || bad "never-say rule has no Technical details exception"
@@ -94,7 +102,7 @@ if ! grep -q "Talking to the user" "$CMD"; then bad "no pointer to 'Talking to t
 elif hits=$(grep -nE "ParentRefSpec|consumed by the FE|named action" "$CMD"); then bad "own question list still in $CMD: $hits"
 else ok; fi
 
-step() { awk -v h="## Step $1" 'index($0,h)==1{on=1; next} on && /^## /{exit} on' "$CMD"; }
+step() { awk -v h="## Step $1" 'index($0,h)==1{on=1; next} on && /^## /{exit} on' "$CMD" || true; }
 t "the command asks once: no separate name or connection round before Step 4"
 if step 2 | grep -q "for the user to"; then bad "Step 2 still asks the user to confirm the name"
 elif step 3 | grep -q "Which saved connection should I use"; then bad "Step 3 still asks for the connection"
