@@ -104,7 +104,7 @@ services:
   # secret, so no host port is published.
   installer:
     # Defaults to .env.example's pin, so `docker compose up` before run.sh copies INSTALLER_TAG into .env still starts.
-    image: quay.io/duplocloud/helpdesk-installer:${INSTALLER_TAG:-main-77bb43ca}
+    image: quay.io/duplocloud/helpdesk-installer:${INSTALLER_TAG:-main-52db2327}
     restart: unless-stopped
     environment:
       - INSTALLER_PLATFORM=compose
@@ -129,11 +129,11 @@ services:
       - EXTENSIONS_LAYERS=${EXTENSIONS_LAYERS:-}
       - EXTENSIONS_CONFIG_INVALID=${EXTENSIONS_CONFIG_INVALID:-}
       - EXTENSIONS_ENROLLMENT_ID=${EXTENSIONS_ENROLLMENT_ID:-}
-      # The license server's catalog, off while LICENSE_SERVER_URL is empty, so the installer runs on local builds only.
-      - LICENSE_SERVER_URL=${LICENSE_SERVER_URL:-}
-      - URL_ROUTE_URL=${URL_ROUTE_URL:-}
-      - CHANNELS_BASE_URL=${CHANNELS_BASE_URL:-}
-      - CHANNELS_BUCKET=${CHANNELS_BUCKET:-}
+      # Prod catalog when unset. A .env value replaces that key. An empty LICENSE_SERVER_URL leaves the catalog off.
+      - LICENSE_SERVER_URL=${LICENSE_SERVER_URL-https://console.duplocloud.com}
+      - URL_ROUTE_URL=${URL_ROUTE_URL-https://results.prod-apps.duplocloud.net/urls}
+      - CHANNELS_BASE_URL=${CHANNELS_BASE_URL-https://channels.prod-apps.duplocloud.net}
+      - CHANNELS_BUCKET=${CHANNELS_BUCKET-duplo-helpdesk-channels}
     volumes:
       # The status record. A named volume, so it survives a recreate and goes with the database on `down -v`.
       - installer_state:/var/lib/installer
