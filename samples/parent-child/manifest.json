@@ -3,6 +3,7 @@
   "id": "com.duplocloud.parentchild",
   "name": "Parent / Child",
   "version": "0.1.0",
+  "agent": "Infrastructure",
 
   "sdkVersion": "REPLACED_BY_SKILL_FROM_sdk-version_ENDPOINT",
   "backend": {
@@ -58,19 +59,12 @@
     },
     "menus": [
       {
-        "id": "com.duplocloud.parentchild-devops",
-        "title": "DevOps",
-        "type": "collapsible-section",
-        "children": [
-          {
-            "id": "com.duplocloud.parentchild-parent-child",
-            "title": "Parent / Child",
-            "type": "item",
-            "matIcon": "account-tree",
-            "relativeUrl": "extensions/hello-parents",
-            "order": 44
-          }
-        ]
+        "id": "com.duplocloud.parentchild-parent-child",
+        "title": "Parent / Child",
+        "type": "item",
+        "matIcon": "account-tree",
+        "relativeUrl": "extensions/hello-parents",
+        "order": 44
       }
     ],
     "routes": [

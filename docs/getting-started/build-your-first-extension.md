@@ -136,8 +136,8 @@ This is deterministic work — do it in a background worker, not an agent skill.
 The result records, per bucket, which rules it fails. Store the results on the resource rather
 than rescanning live on every page load, and have each run append a summary snapshot.
 
-Put it in a new top-level nav group called "S3 Guard" with two items: Overview and Security
-Scans.
+File it under a new left-menu section (its agent) called "S3 Guard", just above Settings, with
+two items: Overview and Security Scans.
 
 Overview is the top-level dashboard and it is where the charts live. It aggregates across ALL
 scans, not one: total buckets scanned, clean, and with at least one violation; a count per

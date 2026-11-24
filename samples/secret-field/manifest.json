@@ -3,6 +3,7 @@
   "id": "com.duplocloud.secretfield",
   "name": "Secret Field Sample",
   "version": "0.1.5",
+  "agent": "Infrastructure",
 
   "sdkVersion": "REPLACED_BY_SKILL_FROM_sdk-version_ENDPOINT",
   "backend": {
@@ -46,19 +47,12 @@
     },
     "menus": [
       {
-        "id": "com.duplocloud.secretfield-devops",
-        "title": "DevOps",
-        "type": "collapsible-section",
-        "children": [
-          {
-            "id": "com.duplocloud.secretfield-service-accounts",
-            "title": "Service Accounts (secrets sample)",
-            "type": "item",
-            "matIcon": "key",
-            "relativeUrl": "extensions/secret-field-service-accounts",
-            "order": 41
-          }
-        ]
+        "id": "com.duplocloud.secretfield-service-accounts",
+        "title": "Service Accounts (secrets sample)",
+        "type": "item",
+        "matIcon": "key",
+        "relativeUrl": "extensions/secret-field-service-accounts",
+        "order": 41
       }
     ],
     "routes": [

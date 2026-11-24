@@ -185,12 +185,36 @@ Settle before building (derive, else ask — **after** listening):
   scaffold ships), under a parent entity (child resources), or grouped under the extension's own category node. Does
   any **custom endpoint** need an explicitly granted **named action** instead of plain CRUD (restart / console /
   credential-minting / apply-infrastructure)? — [18-access-control](reference/18-access-control.md).
-- **Menu placement** — where it appears in the AI Suite left-nav, by **title**: a **new top-level group** (e.g.
-  `Jenkins`, `GCP`), **nested under an existing section** (e.g. `DevOps`), or **no menu**. Default to its own
-  group and state it in the summary; ask only when the requirement points two ways. An **admin** resource's tree goes in the **AI Admin** nav: its top-level node carries
+- **Menu placement** — the items it adds **inside** its left-nav section, or **no menu**. With an **Agent** (below),
+  the Agent decides the section, and every top-level `menus[]` node lands under it, so settle only the item titles
+  and their order within the section. Without
+  one, placement is by **title**: a **new top-level group** (e.g. `Jenkins`, `GCP`) or **nested under an existing
+  section** (e.g. `Infrastructure`). Default to its own group and state it in the summary; ask only when the
+  requirement points two ways. An **admin** resource's tree goes in the **AI Admin** nav: its top-level node carries
   `"scope": "admin"`, and so does each `routes[]` entry it links to ([21](reference/21-admin-resources.md#frontend)). The user gives titles; **you** generate ids, `relativeUrl`s and the matching `frontend.routes[]` —
   [08-parent-child-and-menus](reference/08-parent-child-and-menus.md). Also settle **title** + **`matIcon`** per
   item — derive the icon from the extension's purpose, per the Left-nav icon bullet above.
+- **Agent** — the top-level left-nav section the extension sits in: an **existing** section (`Infrastructure`, or
+  any other built-in heading by its exact title) or a **new** one (`Compliance`, `Release Management`, or a typed
+  name). Ask it with the Agent row in the table below, which also offers the position.
+  Write it as the **manifest-root** `agent` field (sibling of `id` / `name` / `version`; never on a menu node; one
+  agent per extension):
+  - **Existing section** → the plain string, e.g. `"agent": "Infrastructure"`. A built-in section keeps its own
+    position, so never add an order. Never write `"DevOps"`: the built-in heading is now Infrastructure, and
+    `"DevOps"` creates a second, separate heading.
+  - **New section** → **always** the object form with an order, e.g.
+    `"agent": { "name": "Release Management", "order": 85 }`. Without an order a new section defaults to `0` and
+    sits at the very top of the nav, above HelpDesk. Use `85` (just above Settings) unless the author picks a
+    position; "after <section>" is that section's number + 5, "at the top" is `5`. Built-in numbers: HelpDesk 10,
+    Projects 20, Infrastructure 30, Scopes 40, KB 50, Resources 60, Agent Studio 70, Analytics 80, Settings 90.
+  Every extension's default section comes from its own manifest `agent` (DuploCloud's own extensions included); an
+  admin can override the section and position from the Marketplace, and that override wins and survives upgrades.
+  The name must be non-empty, at most 64
+  characters, with no control characters, and `order` an integer — an invalid value is rejected at upload (HTTP 400)
+  and fails the provisioning when deployed through a resource.
+  Every top-level `menus[]` node then renders as a child of the agent's heading, so don't wrap menus
+  in a node titled after the agent ([08 → Filing under an agent](reference/08-parent-child-and-menus.md#filing-under-an-agent--the-root-agent-field)).
+  If the author declines to pick one, delete the template's `agent` line - omit the field entirely, never write `agent: ""`.
 - **One or many resources?** — **flat** (independent — e.g. `GCP` → network/cluster/database) or **parent → child**
   (`samples/parent-child`); several top-level menu groups are fine — [08](reference/08-parent-child-and-menus.md).
 
@@ -200,9 +224,11 @@ The list above is your checklist; its words are yours. The user knows their prob
 they want to see afterwards, who manages it, which outside system it talks to. Settle the checklist from that, and
 put questions to the user in their words, once, in one batch:
 
-- **Always ask:** the Name, Spec fields and Result fields rows, each as your guess for the user to confirm, and the
-  Sensitive fields row for any field that looks like a password, token or key.
-  In-platform, when these three are all the batch holds, they ride the pause below instead of a separate ask.
+- **Always ask:** the Name, Agent, Spec fields and Result fields rows, each as your guess for the user to confirm, and
+  the Sensitive fields row for any field that looks like a password, token or key. For the Agent row, put your guess
+  first ("I'd put it in a new **Release Management** section just above Settings") and keep the row's choices and the
+  position offer, so the user sees both what a section is and that they can move it.
+  In-platform, when these four are all the batch holds, they ride the pause below instead of a separate ask.
 - **Also ask:** any other row where the requirement points two ways and a wrong guess changes what gets built.
 - **Every other row:** state your choice as a default in the summary below. The user approves the summary before
   you build, so a stated default is a decision.
@@ -222,7 +248,8 @@ endpoint, controller, section id), except under **Technical details** in the sum
 | Custom endpoints | "Besides add, edit and delete, does it need any buttons? For example **Run now** or **View logs**." | none |
 | Access control | Only when a button does something sensitive: "Can anyone in the workspace press **Restart**, or only people you allow?" | anyone in the workspace |
 | One or many resources | Only with more than one thing, and never when one only uses the other (an admin thing that workspaces pick): "Does one **Pipeline** hold many **Jobs**?" | flat; an admin thing plus a workspace thing that picks it follows `samples/admin-settings` |
-| Menu placement | Only when the requirement points two ways: "Where in the left menu: its own **Jenkins** group, or under **DevOps**?" | its own group |
+| Agent | Always asked: "Your agent gets a section in the left menu in the DuploCloud AI platform. Should it join an existing section, like **Infrastructure**, or start a new one: **Compliance**, **Release Management**, or a name of your own? A new section goes just above **Settings** unless you want it somewhere else, for example right after Infrastructure." | Infrastructure for infrastructure work; a new section at 85 (just above Settings) |
+| Menu placement | Only when the requirement points two ways: "Inside that section, should it be one **Jenkins Jobs** page, or separate **Jobs** and **Pipelines** pages?" | one page per resource |
 | Deprovision / teardown | "When someone deletes one here, should the Jenkins job be deleted too?" | delete what provisioning created |
 | Outside auth | "How does Jenkins sign in: username and API token, or a single token?" | from the chosen connection |
 | Admin setup page | Only when the requirement hints at admin-wide settings: "Is there anything an admin should set once for everyone, for example a default Jenkins folder?" | one connection per outside system the requirement names; no settings |
@@ -243,7 +270,8 @@ Schedule"); the user can ask for a different one.
 **The summary the user approves** (local: the plan you `ExitPlanMode` with; in-platform: the "Build this?" ask below),
 per resource for multi-resource extensions:
 
-1. **What you'll get**: five to eight plain lines. Its name, where it appears in the menu (AI DevOps or AI Admin), what someone
+1. **What you'll get**: five to eight plain lines. Its name, where it appears in the menu (AI DevOps or AI Admin, and for AI DevOps the left-menu section and its
+   position, e.g. "a new **Release Management** section just above Settings"), what someone
    fills in, what happens after they save (name the pattern by its plain name; in Agent mode, that the add form
    tells users AI does the work), what the page shows, which values stay hidden, what delete does, and what an admin sets up once.
 2. One line per default the user has not confirmed, so they can object.
@@ -259,7 +287,7 @@ per resource for multi-resource extensions:
 - **In-platform:** read `spec.description`/`spec.icon`/`spec.scopeIds` from `shared/extension.json` (plus
   `shared/uploads/*`). Ask through the bootstrap's protocol (`duplo-extension-ticket`, "Questions — ask in chat, never
   park"): POST `Blocked` with `subStatus` `Needs more details` and a `blockedReason` of one plain line, then ONE
-  `ask_human` call holding the whole batch (skip it when it holds only the three always-ask guesses). When the answers
+  `ask_human` call holding the whole batch (skip it when it holds only the four always-ask guesses). When the answers
   arrive, go straight to the pause.
   Then pause before any code, whatever the batch held. POST `Blocked` with the `blockedReason` "Review what I'll build":
   ```bash
