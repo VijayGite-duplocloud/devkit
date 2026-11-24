@@ -555,7 +555,7 @@ hit — with the verbatim error string.
 ```
 ERROR: could not read the host SDK version from http://localhost:60031/v1/aiservicedesk/extensions/sdk-version
        Response (first 300 chars):
-       Check DUPLO_HOST is the AI Helpdesk studio base URL (serving /v1/aiservicedesk), is reachable
+       Check DUPLO_HOST is the DuploCloud AI studio base URL (serving /v1/aiservicedesk), is reachable
        from CI, uses https, and has no trailing path.
        These endpoints require a token (they are no longer anonymous): a 401 here means DUPLO_TOKEN /
        DUPLO_ADMIN_TOKEN is missing or expired.

@@ -68,6 +68,7 @@ Ties the bundle together. For a typed extension (see the hello-world manifest):
 {
   "manifestVersion": "1.0",
   "id": "com.duplocloud.helloworld", "name": "Hello World", "version": "0.1.0",
+  "agent": "Infrastructure",   // optional, root-level; sets the default left-nav heading (≤64 chars; order, if an object, an integer) — see 08-parent-child-and-menus → Filing under an agent
   "sdkVersion": "<from GET …/extensions/sdk-version>",
   "backend": { "assemblyDir": "com.duplocloud.helloworld/0.1.0/backend",
                "entryAssembly": "Duplo.Extension.HelloWorld.dll" },
@@ -106,9 +107,10 @@ extension's own `restSegment` — keep the skill in sync with the manifest and t
 
 ### `frontend.menus[]`
 
-`menus` is an **array of menu trees** matched into the left-nav **by title**: a root title that doesn't exist yet
-becomes a new top-level group; a root that matches an existing section (`DevOps`) nests into it; omit `menus` for
-no nav entry. The author supplies titles; you fill each node's `id`, `relativeUrl` and the matching
+`menus` is an **array of menu trees**. With a manifest-root `agent`, every top-level node becomes a child of the
+agent's heading. Without one, trees are matched into the left-nav **by title**: a root title that doesn't exist yet
+becomes a new top-level group; a root that matches an existing section (`Infrastructure`) nests into it; omit `menus`
+for no nav entry. The author supplies titles; you fill each node's `id`, `relativeUrl` and the matching
 `frontend.routes[]`. Full rules, shapes and the legacy `frontend.menu` deprecation:
 [08-parent-child-and-menus](08-parent-child-and-menus.md#frontend-how-the-child-shows-up).
 

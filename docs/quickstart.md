@@ -1,6 +1,6 @@
 # Quickstart
 
-Zero to a running DuploCloud AI HelpDesk platform, your AWS account connected, and the agent answering a
+Zero to a running DuploCloud AI platform, your AWS account connected, and the agent answering a
 real question about it.
 
 This is the quickstart, so it sticks to the commands and click-paths you need to get running. If you
@@ -46,8 +46,8 @@ docker --version && docker compose version
    own. If the wait times out nothing is lost — click the link, re-run `./run.sh`, and it resumes the same
    request without sending a second email.
 
-   The remaining prompts: `Admin password:` and `Confirm Admin password:` (remembered by the database, not
-   changeable by editing `.env` later) and `Select LLM provider:` → `Enter 1 or 2:` (`1` anthropic, `2` bedrock) and its key.
+   The remaining prompts: `Admin password:` and `Confirm Admin password:` (at least 12 characters;
+   remembered by the database, not changeable by editing `.env` later) and `Select LLM provider:` → `Enter 1 or 2:` (`1` anthropic, `2` bedrock) and its key.
 
 4. `./run.sh` prints a `✔ Platform ready` summary when the stack is up, and ends with
    `==> Open the portal in your browser:` and the URL. Sign in there (by default
@@ -212,8 +212,8 @@ Naming — use exactly these, do not ask me to confirm them:
   - restSegment / frontend route / menu relativeUrl: extensions/whois-lookups
   - Mongo collection: extension_domainlookup
 
-Menu placement — do not ask me about this either: a new top-level left-nav group titled
-"Domains", with a single item titled "Domain Lookup".
+Agent and menu — do not ask me about these either: file it under a new left-menu section
+(its agent) named "Domains", just above Settings, with a single item titled "Domain Lookup".
 
 It needs NO cloud credentials — RDAP and WHOIS are public and unauthenticated. Do not
 attach a scope, do not ask me which scope to use, and do not add any provider config.
@@ -294,11 +294,11 @@ is no teardown to write.
 ```
 
 That block answers every question the intake would otherwise walk you through — the name, the scope,
-the spec and result fields, the provisioning mode, the menu — so Claude Code should go straight to
+the spec and result fields, the provisioning mode, the left-menu section and its items — so Claude Code should go straight to
 **one plan** covering the fields, the UI, the files, and the build commands. Approve it once and it
 runs unattended.
 
-When it finishes, it will have packaged your extension and pushed it into your dev-kit HelpDesk. The
+When it finishes, it will have packaged your extension and pushed it into your dev-kit platform. The
 platform hot-loads it — there is nothing to restart.
 
 ### d. See it in the portal

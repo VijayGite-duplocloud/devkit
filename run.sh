@@ -651,6 +651,24 @@ license_wait_failed() { # rc id [trial|recovery]
   esac
 }
 
+# Portal password policy (backend): the admin password must be at least this long. A shorter one is
+# accepted by the DB seed, but the first login then returns mustChangePassword instead of a token.
+ADMIN_PW_MIN_LEN=12
+# Refuses a --password that is too short when there is no saved password for it to replace. A saved one
+# is taken as-is, so an existing install with a shorter password isn't locked out.
+check_flag_password() { # flag_pw saved_pw
+  if [ -n "$1" ] && [ -z "$2" ] && [ "${#1}" -lt "$ADMIN_PW_MIN_LEN" ]; then
+    echo "--password must be at least $ADMIN_PW_MIN_LEN characters (portal password policy)." >&2
+    return 1
+  fi
+  return 0
+}
+
+# ── pre-flight: --password length (run before --reset tears anything down or a license is requested) ──
+# --reset blanks the saved password further down, so with --reset there is no saved password to keep.
+PF_SAVED_PW=""; [ "$RESET" = 1 ] || PF_SAVED_PW="$(getenv Authentication__LocalAdminPassword)"
+check_flag_password "$F_PASSWORD" "$PF_SAVED_PW" || exit 1
+
 # ── pre-flight: license checks (run before ANYTHING is written) ───────────────
 # A license is not re-issuable: the server issues exactly ONE trial per email address. It is, however,
 # RECOVERABLE — the server will email the licensee a link that releases the same license to this dev kit —
@@ -820,6 +838,7 @@ prompt_new_password() { # var label
   while :; do
     prompt __p1 "$2" secret || return
     [ -n "$__p1" ] || { echo "  Password cannot be empty." >&2; continue; }
+    [ "${#__p1}" -ge "$ADMIN_PW_MIN_LEN" ] || { echo "  Password must be at least $ADMIN_PW_MIN_LEN characters (portal password policy)." >&2; continue; }
     prompt __p2 "Confirm $2" secret || return
     [ "$__p1" = "$__p2" ] && break
     echo "  Passwords do not match — try again." >&2
@@ -1042,8 +1061,9 @@ fi
 # (END LICENSE BLOCK)
 
 # Not resolve(): a password typed here is new (flag and .env are both empty), so it is confirmed.
-# --password and an existing .env value are taken as-is, exactly as before.
-PASSWORD="$F_PASSWORD"; [ -z "$PASSWORD" ] && PASSWORD="$(getenv Authentication__LocalAdminPassword)"
+# A short --password was already refused in pre-flight (check_flag_password).
+SAVED_PW="$(getenv Authentication__LocalAdminPassword)"
+PASSWORD="$F_PASSWORD"; [ -z "$PASSWORD" ] && PASSWORD="$SAVED_PW"
 if [ -z "$PASSWORD" ]; then
   [ "$NONINTERACTIVE" = 1 ] && { echo "Missing Authentication__LocalAdminPassword — pass --password (non-interactive)." >&2; exit 1; }
   prompt_new_password PASSWORD 'Admin password' || { echo "No password provided — re-run with --password <pw>." >&2; exit 1; }
@@ -1242,10 +1262,30 @@ token_ok() { curl -fsS -o /dev/null --max-time 6 "$API/v1/aiservicedesk/admin/ex
 TOK="$(getenv DUPLO_ADMIN_TOKEN)"
 if [ -z "$TOK" ] || ! token_ok "$TOK"; then
   echo "==> Minting permanent admin API token…"
-  JWT="$(curl -fsS --max-time 10 -X POST "$API/api/Account/PasswordLogin" -H "Content-Type: application/json" \
-        --data "$(E="$EMAIL" P="$PASSWORD" python3 -c 'import json,os;print(json.dumps({"username":os.environ["E"],"password":os.environ["P"]}))')" \
-        | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])' 2>/dev/null)"
-  [ -n "$JWT" ] || { echo "Login failed for $EMAIL — check the admin email/password (./run.sh --reset to re-enter)." >&2; exit 1; }
+  # curl's exit status is kept: a studio that is down or timing out must not be reported as a bad password,
+  # because that message points at --reset, which wipes the DB. The token lookup ends in `|| true` so a
+  # response without access_token can't abort silently under set -euo pipefail (DUPLOAI-5693).
+  LOGIN_RC=0
+  LOGIN_RESP="$(curl -sS --max-time 10 -w '\n%{http_code}' -X POST "$API/api/Account/PasswordLogin" -H "Content-Type: application/json" \
+        --data "$(E="$EMAIL" P="$PASSWORD" python3 -c 'import json,os;print(json.dumps({"username":os.environ["E"],"password":os.environ["P"]}))')")" || LOGIN_RC=$?
+  if [ "$LOGIN_RC" != 0 ]; then
+    echo "Studio at $API is not reachable (curl exit $LOGIN_RC) — this is not a password problem, so don't --reset." >&2
+    echo "  Check \`${RUNTIME:-docker} compose ps\` and \`${RUNTIME:-docker} compose logs studio\`, then re-run ./run.sh." >&2
+    exit 1
+  fi
+  LOGIN_CODE="${LOGIN_RESP##*$'\n'}"; LOGIN_BODY="${LOGIN_RESP%$'\n'*}"
+  JWT="$(printf '%s' "$LOGIN_BODY" | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])' 2>/dev/null || true)"
+  if [ -z "$JWT" ]; then
+    case "$LOGIN_CODE" in
+      5??) echo "Studio at $API returned HTTP $LOGIN_CODE on login — a studio error, not a password problem, so don't --reset." >&2
+           echo "  Check \`${RUNTIME:-docker} compose logs studio\`, then re-run ./run.sh." >&2 ;;
+      *)   echo "Login failed for $EMAIL (HTTP $LOGIN_CODE) — check the admin email/password (./run.sh --reset to re-enter)." >&2
+           case "$LOGIN_BODY" in *mustChangePassword*)
+             echo "  The portal wants this password changed: it does not meet the portal password policy." >&2 ;; esac ;;
+    esac
+    exit 1
+  fi
+  # (END LOGIN)
   # The server caps active API tokens per user (10). Each mint whose plaintext is lost from .env (a
   # --reset, a fresh .env, a partial run) leaves a stale active token, so re-runs eventually hit the cap
   # and minting 400s. Revoke our own prior 'dev-kit-admin' tokens first so a fresh mint always has room.

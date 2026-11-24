@@ -114,7 +114,9 @@ after the `DuploSdkVersion` default. A test project that references the backend 
 
 Build against each host you ship to. The installer hands a host only a build whose SDK version matches, so an
 environment still on 1.0.x and one on 1.2.0 each take the bundle built against their own SDK. The toolchain
-image ships the .NET 10 SDK, which builds both; a `--native` build needs .NET SDK 10 installed for a 1.2.0 host.
+image ships the .NET 10 SDK, which builds both, and the .NET 8 runtime beside it, which the obfuscation step needs
+to run on a `net8.0` bundle; a `--native` build needs .NET SDK 10 installed for a 1.2.0 host, and the .NET 8
+runtime as well to release a `net8.0` bundle from a DuploCloud repository.
 
 ## After an upgrade
 
