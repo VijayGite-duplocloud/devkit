@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build an extension into <dir>/dist/agent.zip, against the locally-running platform's SDK feed.
+# Build an agent into <dir>/dist/agent.zip, against the locally-running platform's SDK feed.
 # Mirrors the duplo-extension-dev skill (fetch SDK → dotnet publish → npm build → zip).
 #
 # The build runs inside the builder container (.NET SDK 10 + Node 22) so Docker Compose is the only

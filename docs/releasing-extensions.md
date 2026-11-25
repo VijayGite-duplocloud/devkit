@@ -305,7 +305,9 @@ found. That pin moves in its own change once the image is published, and `releas
 In DuploCloud's organizations a signed build uploads to
 `s3://duplo-helpdesk-channels/bundles/[id]/[version]/sdk-[sdkVersion]/` in `us-west-2`, as two objects on a push to
 `main`,
-`agent.zip` and `agent.zip.sig`, with the assumed role. Both the bucket name and the console URL can be
+`extension.zip` and `extension.zip.sig` — this key stays that name even though the build and the GitHub Release
+asset are `agent.zip`; the installer resolves bundles by this literal S3 key, so it does not move independently —
+with the assumed role. Both the bucket name and the console URL can be
 overridden with the `BUNDLE_BUCKET` and `CONSOLE_URL` repository variables. Left unset, they default to the
 production bucket and the production console. Elsewhere the action asks the console for an upload URL with the
 console key and uploads through that, so the bucket is never named.
