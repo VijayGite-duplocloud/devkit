@@ -91,11 +91,11 @@ On an EC2 host the provider prompt first probes whether the instance role can ac
 16. Configures the Knowledge Base (`scripts/register-qdrant.sh`): registers the local Qdrant as a provider,
     makes it selectable from the `agent-dev` workspace, and creates the empty `devkit-docs` collection.
     Never fatal — a Knowledge Base that did not configure does not stop the platform coming up.
-17. Installs the default extensions listed by manifest id in `run.sh`'s `DEVKIT_EXTENSIONS` from the extension
+17. Installs the default agents listed by manifest id in `run.sh`'s `DEVKIT_EXTENSIONS` from the agent
     registry (`scripts/install-extensions.sh`), today Cloud Setup (`com.duplocloud.cloud-setup`): refreshes the registry catalog,
     installs the version the installer offers, and waits for the installer to finish (up to
-    `EXT_INSTALL_TIMEOUT`, default 300 seconds, per extension). An id the catalog doesn't list, or offers no
-    version of, is skipped. Never fatal — an extension that did not install does not stop the platform coming up.
+    `EXT_INSTALL_TIMEOUT`, default 300 seconds, per agent). An id the catalog doesn't list, or offers no
+    version of, is skipped. Never fatal — an agent that did not install does not stop the platform coming up.
 
 Steps 10–17 are each idempotent and skipped when already satisfied. So is step 5: a license already in
 `.env` is used as-is, and a run that was interrupted mid-verification resumes from the request id it saved.

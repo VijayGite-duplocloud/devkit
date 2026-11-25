@@ -1444,8 +1444,8 @@ case "$KB_RC" in
   *) echo "    (knowledge base setup failed — run ./scripts/register-qdrant.sh manually)" ;;
 esac
 
-# ── install the dev-kit's default extensions (idempotent, never fatal) ─────────
-# DUPLOAI-4813: a fresh dev kit comes up with the agents people start from already installed from the extension
+# ── install the dev-kit's default agents (idempotent, never fatal) ─────────
+# DUPLOAI-4813: a fresh dev kit comes up with the agents people start from already installed from the agent
 # registry. This list is the one place to add more, and it drives the install: each entry is a MANIFEST id — the
 # license catalog's manifest_id, which the installer keys installs on. Never the agent's UUID (it matches no catalog
 # entry and the install fails not-entitled) and never the catalog's display id (renameable). No @version: the
