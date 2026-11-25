@@ -44,7 +44,7 @@ read from the secrets file.
 ```bash
 # The scripts read the target platform from .env (scripts/_target.sh).
 ./scripts/build-extension.sh  samples/secret-field
-./scripts/deploy-extension.sh samples/secret-field/dist/extension.zip
+./scripts/deploy-extension.sh samples/secret-field/dist/agent.zip
 ```
 
 ## Try it

@@ -101,9 +101,9 @@ DUPLO_SDK_VERSIONS=1.0.6,1.0.7 ./scripts/build-extension.sh extensions/<name>
   `DUPLO_TOKEN` is needed to build.
 - The frontend is built once; the backend is published once per version, with `-p:DuploSdkVersion=<v>`, and
   obfuscated when `ARMDOT_LICENSE_FILE_PATH` is set, as in a host build.
-- Output is `dist/sdk-<v>/extension.zip` per version, each stamped `sdkVersion: <v>` and no `sdkDigest` (there
-  is no host bundle to fingerprint). `dist/extension.zip` is not written, and a bundle for a version no longer
-  listed is removed by the next build. Unset, the variable keeps the single host build at `dist/extension.zip`.
+- Output is `dist/sdk-<v>/agent.zip` per version, each stamped `sdkVersion: <v>` and no `sdkDigest` (there
+  is no host bundle to fingerprint). `dist/agent.zip` is not written, and a bundle for a version no longer
+  listed is removed by the next build. Unset, the variable keeps the single host build at `dist/agent.zip`.
 - The host credentials are for deploying only. `scripts/deploy-all.sh` reads the host's `sdk-version` and loads
   the one bundle stamped with it, failing when none matches; `scripts/deploy-extension.sh <zip>` loads the bundle
   you name, which the host rejects unless its `sdkVersion` is the host's.

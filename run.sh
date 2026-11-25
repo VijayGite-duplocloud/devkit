@@ -46,7 +46,8 @@
 #
 # On completion it has: obtained a trial license for your admin email (Licensing__Token in .env),
 # pulled+started the stack, minted a permanent admin API token into .env
-# (DUPLO_ADMIN_TOKEN), and created an 'agent-dev' workspace (EXTENSION_DEV_WORKSPACE_ID). All values persist in .env.
+# (DUPLO_ADMIN_TOKEN), created an 'agent-dev' workspace (EXTENSION_DEV_WORKSPACE_ID), and installed the
+# default agents from the registry (DEVKIT_EXTENSIONS). All values persist in .env.
 set -euo pipefail
 cd "$(dirname "$0")"
 ENV=.env
@@ -1400,7 +1401,7 @@ elif ./scripts/fetch-terraform-extension.sh; then
   TF_EXT_LINE="
   Terraform extensions/terraform (source vendored — build + load it with ./scripts/build-extension.sh)"
 else
-  echo "    (Terraform extension not vendored — re-run ./scripts/fetch-terraform-extension.sh when you can reach the repo)"
+  echo "    (Terraform agent not vendored — re-run ./scripts/fetch-terraform-extension.sh when you can reach the repo)"
 fi
 
 # ── register the model the agent runs on as the System default (every provider) ───
@@ -1442,6 +1443,31 @@ case "$KB_RC" in
   KB        local-qdrant registered; collection skipped — re-run ./scripts/register-qdrant.sh" ;;
   *) echo "    (knowledge base setup failed — run ./scripts/register-qdrant.sh manually)" ;;
 esac
+
+# ── install the dev-kit's default extensions (idempotent, never fatal) ─────────
+# DUPLOAI-4813: a fresh dev kit comes up with the agents people start from already installed from the extension
+# registry. This list is the one place to add more, and it drives the install: each entry is a MANIFEST id — the
+# license catalog's manifest_id, which the installer keys installs on. Never the agent's UUID (it matches no catalog
+# entry and the install fails not-entitled) and never the catalog's display id (renameable). No @version: the
+# script refreshes the catalog, installs the build the installer offers with pin:false (so it keeps following
+# registry updates), and waits for the installer to report it installed (EXT_INSTALL_TIMEOUT, default 300s).
+# An id the catalog doesn't list or offers no version of is skipped; one already current, pinned or being installed
+# is left alone. Non-fatal, like the KB step above: an agent that failed to install must never stop the
+# platform coming up.
+DEVKIT_EXTENSIONS=(
+  com.duplocloud.cloud-setup   # Cloud Setup, the ticket's Cloud Deployment Agent (manifest id; its agent id 99104691-… is not an install key)
+)
+EXT_LINE=""
+echo "==> Installing default agents…"
+# Checked first: bash 3.2 (macOS) under set -u aborts on "${DEVKIT_EXTENSIONS[@]}" when the list is empty.
+if [ ${#DEVKIT_EXTENSIONS[@]} -eq 0 ]; then
+  echo "    (DEVKIT_EXTENSIONS is empty — nothing to install)"
+elif ./scripts/install-extensions.sh "${DEVKIT_EXTENSIONS[@]}"; then
+  EXT_LINE="
+  Agent ${DEVKIT_EXTENSIONS[*]} → installed or skipped, see the output above"
+else
+  echo "    (agent install incomplete — re-run ./scripts/install-extensions.sh ${DEVKIT_EXTENSIONS[*]})"
+fi
 
 # ── where to open the portal ──────────────────────────────────────────────────
 # Authentication__FrontendBaseUrl is the configured portal address, so a customised host shows up in the
@@ -1499,7 +1525,7 @@ cat <<EOF
   API       $API
   Workspace agent-dev  ($WS)  ·  agent registered + attached
   Token     DUPLO_ADMIN_TOKEN set in .env (permanent)
-  License   ${LICENSE_STATUS:-set in .env} (Licensing__Token)$PERSONA_LINE$LLM_LINE$KB_LINE$TF_EXT_LINE
+  License   ${LICENSE_STATUS:-set in .env} (Licensing__Token)$PERSONA_LINE$LLM_LINE$KB_LINE$EXT_LINE$TF_EXT_LINE
 
 Build & deploy your agent (scripts read the target from .env — no DUPLO_BASE= prefix needed):
   ./scripts/build-extension.sh  extensions/<name>               # your agents live in extensions/<name>/
