@@ -113,7 +113,7 @@ there is reported as registered rather than replaced.
 ### Where it shows up
 
 Your team's agents are private. Only your team sees them in the console, and only portals licensed to your
-team see them in their **Agent Library**. A version appears there once it is published. Publish it from
+team see them in their **Marketplace**. A version appears there once it is published. Publish it from
 the console, by editing the version, or start the Agent Release workflow by hand with its `publish`
 input checked, which publishes each version that run registers a first build for. A version an earlier run
 registered is published in the console.

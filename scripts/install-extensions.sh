@@ -118,7 +118,7 @@ case "$STATE" in
       missing)     why="no license is configured" ;;
       invalid)     why="the license server refused this install's license" ;;
       unavailable) why="the license server could not be reached" ;;
-      *)           why="see the Extension Library page" ;;
+      *)           why="see the Marketplace" ;;
     esac
     echo "    ✗ could not read the agent catalog: library state \"$STATE\" ($why)" >&2; exit 1 ;;
 esac
@@ -227,7 +227,7 @@ wait_for_install() {
       esac
     fi
     if [ "$SECONDS" -ge "$deadline" ]; then
-      echo "    ✗ $id $ver — still $last after ${TIMEOUT}s (EXT_INSTALL_TIMEOUT); check the Agent Library page" >&2
+      echo "    ✗ $id $ver — still $last after ${TIMEOUT}s (EXT_INSTALL_TIMEOUT); check the Marketplace" >&2
       return 1
     fi
     sleep "$POLL"

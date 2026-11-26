@@ -322,7 +322,7 @@ if [ "$RC" = 1 ] && has "$ERR" "    ✗ com.example.x 1.10.0 — install failed:
 
 reset; echo downloading > "$STUB/states"; TIMEOUT=0 run com.example.x
 t "install_timeout: still running when the wait ends → error naming the last state and the timeout"
-if [ "$RC" = 1 ] && has "$ERR" "    ✗ com.example.x 1.10.0 — still downloading after 0s (EXT_INSTALL_TIMEOUT); check the Agent Library page"
+if [ "$RC" = 1 ] && has "$ERR" "    ✗ com.example.x 1.10.0 — still downloading after 0s (EXT_INSTALL_TIMEOUT); check the Marketplace"
 then ok; else bad "rc=$RC out=$OUT err=$ERR"; fi
 
 # Without a requestId in the reply, the request is found by id and version.
