@@ -5,6 +5,10 @@
 
 Run the DuploCloud Agentic Platform on your laptop in containers, then build your own Agent against it. Each Agent you write ships a backend, a UI, and its own provisioning, and hot-loads into the running platform with no restart.
 
+> **Naming note:** Agents were previously called Extensions. Paths (`extensions/<name>/`), REST routes,
+> Mongo collections, env vars, and script names still say `extension` on purpose — that is a deliberate
+> backward-compatibility boundary, not an incomplete rename.
+
 ![The DuploCloud platform running locally, with the New Extension form filled in](docs/images/devkit-new-extension.png)
 
 ## Why you'd want it

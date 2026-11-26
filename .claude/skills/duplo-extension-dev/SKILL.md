@@ -5,6 +5,11 @@ description: Build and load a DuploCloud platform agent (a typed agent — C# Re
 
 # duplo-extension-dev — write a DuploCloud platform agent
 
+> **Naming note:** Agents were previously called Extensions. Paths (`extensions/<name>/`), REST routes,
+> Mongo collections, env vars, and script names (this skill's own folder included) still say `extension`
+> on purpose — that is a deliberate backward-compatibility boundary, not an incomplete rename. Leave them
+> as they are.
+
 You build a **platform agent**: a brand-new, first-class DuploCloud **Resource type** with its own
 C# `ResourcesController` + service + entity (own Mongo collection + REST route), an Angular
 Native-Federation remote (list/add/view), and a provisioning skill. The studio **hot-loads** the
@@ -194,9 +199,10 @@ Settle before building (derive, else ask — **after** listening):
   `"scope": "admin"`, and so does each `routes[]` entry it links to ([21](reference/21-admin-resources.md#frontend)). The user gives titles; **you** generate ids, `relativeUrl`s and the matching `frontend.routes[]` —
   [08-parent-child-and-menus](reference/08-parent-child-and-menus.md). Also settle **title** + **`matIcon`** per
   item — derive the icon from the agent's purpose, per the Left-nav icon bullet above.
-- **Agent** — the top-level left-nav section the agent sits in: an **existing** section (`Infrastructure`, or
-  any other built-in heading by its exact title) or a **new** one (`Compliance`, `Release Management`, or a typed
-  name). Ask it with the Agent row in the table below, which also offers the position.
+- **Nav section (`agent` field)** — the top-level left-nav section the agent sits in: an **existing** section
+  (`Infrastructure`, or any other built-in heading by its exact title) or a **new** one (`Compliance`,
+  `Release Management`, or a typed name). Ask it with the Nav section row in the table below, which also offers
+  the position.
   Write it as the **manifest-root** `agent` field (sibling of `id` / `name` / `version`; never on a menu node; one
   per manifest):
   - **Existing section** → the plain string, e.g. `"agent": "Infrastructure"`. A built-in section keeps its own
@@ -224,10 +230,11 @@ The list above is your checklist; its words are yours. The user knows their prob
 they want to see afterwards, who manages it, which outside system it talks to. Settle the checklist from that, and
 put questions to the user in their words, once, in one batch:
 
-- **Always ask:** the Name, Agent, Spec fields and Result fields rows, each as your guess for the user to confirm, and
-  the Sensitive fields row for any field that looks like a password, token or key. For the Agent row, put your guess
-  first ("I'd put it in a new **Release Management** section just above Settings") and keep the row's choices and the
-  position offer, so the user sees both what a section is and that they can move it.
+- **Always ask:** the Name, Nav section, Spec fields and Result fields rows, each as your guess for the user to
+  confirm, and the Sensitive fields row for any field that looks like a password, token or key. For the Nav
+  section row, put your guess first ("I'd put it in a new **Release Management** section just above Settings")
+  and keep the row's choices and the position offer, so the user sees both what a section is and that they can
+  move it.
   In-platform, when these four are all the batch holds, they ride the pause below instead of a separate ask.
 - **Also ask:** any other row where the requirement points two ways and a wrong guess changes what gets built.
 - **Every other row:** state your choice as a default in the summary below. The user approves the summary before
@@ -248,7 +255,7 @@ endpoint, controller, section id), except under **Technical details** in the sum
 | Custom endpoints | "Besides add, edit and delete, does it need any buttons? For example **Run now** or **View logs**." | none |
 | Access control | Only when a button does something sensitive: "Can anyone in the workspace press **Restart**, or only people you allow?" | anyone in the workspace |
 | One or many resources | Only with more than one thing, and never when one only uses the other (an admin thing that workspaces pick): "Does one **Pipeline** hold many **Jobs**?" | flat; an admin thing plus a workspace thing that picks it follows `samples/admin-settings` |
-| Agent | Always asked: "Your agent gets a section in the left menu in the DuploCloud AI platform. Should it join an existing section, like **Infrastructure**, or start a new one: **Compliance**, **Release Management**, or a name of your own? A new section goes just above **Settings** unless you want it somewhere else, for example right after Infrastructure." | Infrastructure for infrastructure work; a new section at 85 (just above Settings) |
+| Nav section | Always asked: "Your agent gets a section in the left menu in the DuploCloud AI platform. Should it join an existing section, like **Infrastructure**, or start a new one: **Compliance**, **Release Management**, or a name of your own? A new section goes just above **Settings** unless you want it somewhere else, for example right after Infrastructure." | Infrastructure for infrastructure work; a new section at 85 (just above Settings) |
 | Menu placement | Only when the requirement points two ways: "Inside that section, should it be one **Jenkins Jobs** page, or separate **Jobs** and **Pipelines** pages?" | one page per resource |
 | Deprovision / teardown | "When someone deletes one here, should the Jenkins job be deleted too?" | delete what provisioning created |
 | Outside auth | "How does Jenkins sign in: username and API token, or a single token?" | from the chosen connection |

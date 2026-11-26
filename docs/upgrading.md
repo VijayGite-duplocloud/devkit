@@ -26,6 +26,11 @@ an untrusted source. It then refreshes only an allowlist of framework-owned path
 
 Everything else — `extensions/`, `.env`, compose overrides, and any file you add — is preserved.
 
+**If you're upgrading past the Extension→Agent rename:** `scripts/build-extension.sh` now writes
+`dist/agent.zip` instead of `dist/extension.zip`, so rebuild after upgrading, and update any custom CI step
+of your own that specifically reads `dist/extension.zip`. Your existing dev workspace keeps its
+`extension-dev` name — it is reused, not recreated or renamed.
+
 Flags:
 
 | Flag | Effect |

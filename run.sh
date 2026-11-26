@@ -1309,26 +1309,40 @@ fi
 
 # ── agent-dev workspace (idempotent, never deleted) ──────────────────────────
 WS="$(getenv EXTENSION_DEV_WORKSPACE_ID)"
-ws_exists() { [ -n "$1" ] && curl -fsS -o /dev/null --max-time 6 "$API/v1/aiservicedesk/admin/data/workspaces/$1" -H "Authorization: Bearer $TOK" 2>/dev/null; }
-if ! ws_exists "$WS"; then
+# Reads the workspace's real name, not just whether the id is valid — an older stack may still be on
+# the pre-rename 'extension-dev', and the status line below must report what the platform actually has,
+# not assume the new name.
+ws_name() {
+  [ -n "$1" ] || return 0
+  curl -fsS --max-time 6 "$API/v1/aiservicedesk/admin/data/workspaces/$1" -H "Authorization: Bearer $TOK" 2>/dev/null \
+    | python3 -c 'import sys,json
+try:
+    d=json.load(sys.stdin); print(d.get("data",d).get("name",""))
+except Exception:
+    pass' 2>/dev/null || true
+}
+WS_NAME="$(ws_name "$WS")"
+if [ -z "$WS_NAME" ]; then
   # Find existing by name, else create. Checks the pre-rename 'extension-dev' name too, so a stack set up
   # before the agent-dev rename reuses its workspace instead of getting a second one alongside it.
-  WS="$(curl -fsS --max-time 8 "$API/v1/aiservicedesk/admin/data/workspaces" -H "Authorization: Bearer $TOK" 2>/dev/null \
+  read -r WS WS_NAME <<<"$(curl -fsS --max-time 8 "$API/v1/aiservicedesk/admin/data/workspaces" -H "Authorization: Bearer $TOK" 2>/dev/null \
       | python3 -c 'import sys,json
 d=json.load(sys.stdin); items=d.get("data",{}); items=items.get("items",items) if isinstance(items,dict) else items
 items=items or []
-print(next((w["id"] for w in items if w.get("name")=="agent-dev"),
-      next((w["id"] for w in items if w.get("name")=="extension-dev"), "")))' 2>/dev/null || true)"
+w=next((w for w in items if w.get("name")=="agent-dev"),
+    next((w for w in items if w.get("name")=="extension-dev"), None))
+print((w["id"]+" "+w["name"]) if w else "")' 2>/dev/null || true)"
   if [ -z "$WS" ]; then
     echo "==> Creating 'agent-dev' workspace…"
     # Everything after this needs the workspace, so a refused create (most often an expired license —
     # the studio answers 400 license_limit_exceeded) stops here with the server's reason, not a traceback.
     WS="$(studio_create_id "$API/v1/aiservicedesk/admin/data/workspaces" '{"name":"agent-dev"}')" \
       || { echo "Could not create the agent-dev workspace — fix the cause above and re-run ./run.sh." >&2; exit 1; }
+    WS_NAME="agent-dev"
   fi
   setenv EXTENSION_DEV_WORKSPACE_ID "$WS"
 fi
-echo "    agent-dev workspace: $WS"
+echo "    $WS_NAME workspace: $WS"
 
 # ── UI workspace access (idempotent) ─────────────────────────────────────────
 # The UI's accessible-tenants list is permission-set based (no SuperUser bypass), so the admin user
@@ -1373,7 +1387,7 @@ echo "    UI access granted to $EMAIL (permission set $PS) — re-login if the w
 
 # ── register + attach the agent to the agent-dev workspace (idempotent) ──────
 # Provisioning tickets are assigned from the workspace's agent list, so the workspace needs an agent.
-echo "==> Registering + attaching agent to agent-dev workspace…"
+echo "==> Registering + attaching the AI agent to agent-dev workspace…"
 ./scripts/register-agent.sh "$WS" || echo "    (agent registration failed — run ./scripts/register-agent.sh $WS manually)"
 
 # ── starter devops skill + persona, attached to the workspace (idempotent) ───────
@@ -1523,7 +1537,7 @@ cat <<EOF
 ✔ Platform ready (provider: $PROVIDER_DESC)
   UI        $PORTAL_URL     (login: $EMAIL)
   API       $API
-  Workspace agent-dev  ($WS)  ·  agent registered + attached
+  Workspace $WS_NAME  ($WS)  ·  AI agent registered + attached
   Token     DUPLO_ADMIN_TOKEN set in .env (permanent)
   License   ${LICENSE_STATUS:-set in .env} (Licensing__Token)$PERSONA_LINE$LLM_LINE$KB_LINE$EXT_LINE$TF_EXT_LINE
 

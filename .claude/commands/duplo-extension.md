@@ -2,6 +2,11 @@
 description: Start authoring a DuploCloud agent — gather name + detailed requirements, list the platform's available scopes and pick which to test with, ask clarifying questions, then scaffold + build via the duplo-extension-dev skill.
 ---
 
+> **Naming note:** Agents were previously called Extensions. Paths (`extensions/<name>/`), REST routes,
+> Mongo collections, env vars, and script names (including this command's own file name) still say
+> `extension` on purpose — that is a deliberate backward-compatibility boundary, not an incomplete rename.
+> Leave them as they are.
+
 You are kicking off authoring a new **DuploCloud platform agent** in this dev-kit repo.
 
 ## Run plan-first, approve once
